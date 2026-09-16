@@ -1,0 +1,12 @@
+name: "hyperdata"
+version: "1.0.0"
+config-version: 2
+
+profile: "hyperdata"
+
+model-paths: ["models"]
+test-paths: ["tests"]
+
+models:
+  hyperdata:
+    +materialized: view

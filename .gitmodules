@@ -1,0 +1,3 @@
+[submodule "services/hyperdata-node"]
+	path = services/hyperdata-node
+	url = https://github.com/Cortajarena/hyperdata-node

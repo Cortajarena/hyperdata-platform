@@ -1,0 +1,19 @@
+{
+  "workbench.colorTheme": "Monokai",
+  "editor.formatOnSave": true,
+  "editor.minimap.enabled": false,
+  "editor.rulers": [
+    100
+  ],
+  "[html]": {
+    "editor.formatOnSave": false
+  },
+  "diffEditor.renderSideBySide": false,
+  "git.detectSubmodulesLimit": 20,
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/node_modules": true,
+    "polymarket-indexer/generated": true
+  }
+}

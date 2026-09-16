@@ -1,0 +1,68 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  build:
+    context: ./platform/airflow
+  environment:
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+  volumes:
+    - ./platform/airflow/dags:/opt/airflow/dags
+    - ./services/dbt:/opt/airflow/dbt
+    - /var/run/docker.sock:/var/run/docker.sock
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  # --- Databases ---
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Orchestration Platform ---
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+
+  # --- Stream Processing Platform ---
+  flink-jobmanager:
+    build:
+      context: ./platform/flink-cluster
+    command: jobmanager
+    ports:
+      - "8081:8081"
+
+  flink-taskmanager:
+    build:
+      context: ./platform/flink-cluster
+    command: taskmanager
+    depends_on:
+      - flink-jobmanager
+
+  # --- Batch Execution Processing ---
+  spark-master:
+    build:
+      context: ./services/spark
+    command: bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "7077:7077"
+      - "9090:8080"
+    volumes:
+      - ./services/spark:/opt/spark/workloads
