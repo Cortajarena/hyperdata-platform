@@ -1,0 +1,10 @@
+site_name: Hyperdata Platform
+site_description: Unified polyglot data platform monorepo
+
+theme:
+  name: material
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Getting Started: getting-started.md

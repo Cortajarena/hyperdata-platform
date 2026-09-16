@@ -5,15 +5,13 @@
   "editor.rulers": [
     100
   ],
-  "[html]": {
-    "editor.formatOnSave": false
-  },
+  "editor.wordWrap": "wordWrapColumn",
+  "editor.wordWrapColumn": 95,
   "diffEditor.renderSideBySide": false,
   "git.detectSubmodulesLimit": 20,
   "files.exclude": {
     "**/__pycache__": true,
     "**/*.pyc": true,
     "**/node_modules": true,
-    "polymarket-indexer/generated": true
   }
 }
