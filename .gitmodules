@@ -1,3 +1,6 @@
 [submodule "services/hyperdata-node"]
 	path = services/hyperdata-node
 	url = git@github.com:Cortajarena/hyperdata-node.git
+[submodule "services/hyperdata-indexer-hyperevm"]
+	path = services/hyperdata-indexer-hyperevm
+	url = git@github.com:Cortajarena/hyperdata-indexer-hyperevm.git
