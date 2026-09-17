@@ -12,6 +12,7 @@
 - With added support for other external financial time-series & **EVM** blockchains, HyperData aims to support (promptly) any **CEX**, **DEX**, **EVM** or similar (like structured financial time series).
 - Easy and minimal local development and replication.
 - Easy and minimal deployment to any cloud provider (mainly **[AWS](https://docs.aws.amazon.com/)** / **[GCP](https://cloud.google.com/docs)** in the beginning) with **[Helm](https://helm.sh/docs/)** and **[Kubernetes](https://kubernetes.io/docs/home/)**.
+- Support for multiple centralized data warehousing options, like **[BigQuery](https://cloud.google.com/bigquery/docs)**, **[ClickHouse](https://clickhouse.com/docs)**, **[Redshift](https://docs.aws.amazon.com/redshift/)**, etc.
 - Built-in centralized monitoring & alerting with **[Grafana](https://grafana.com/docs/)** / **[Prometheus](https://prometheus.io/docs/)** as part of the stack.
 - Efficient and distributed backfills and disaster recovery tools. Support to plug historical data from providers like **[Dwellir](https://docs.dwellir.com/)** or **[QuickNode](https://www.quicknode.com/docs)**.
 - Built-in minimal UI (simple WebApp + **[Apache Superset](https://superset.apache.org/docs/)**) for data exploration and analysis.
@@ -37,6 +38,10 @@ Milestones:
 
 - [ ] Ingestion of **HyperCore** (order diffs, trades, etc.) node outputs.
 
+### Hypercore ingestion (or any other Limit Order Book or event feeds)
+
+If we are not relying on 
+
 For now, we will be supporting full ingestion of HyperCore's outputs. Later versions will support lightweight and fast ingestion of particular events in **HyperEVM** or the full raw EVM schema:
 
 | Table | Source RPC Method / Strategy for HyperEVM | Complexity |
@@ -49,6 +54,8 @@ For now, we will be supporting full ingestion of HyperCore's outputs. Later vers
 | **`tokens`** | Call standard **[ERC-20](https://docs.openzeppelin.com/contracts/erc20)** / **[ERC-721](https://docs.openzeppelin.com/contracts/erc721)** view functions (`name()`, `symbol()`) on discovered contracts | Medium |
 | **`token_transfers`** | Filter logs for the standard `Transfer` event signature | Low |
 | **`balances`** | Reconstruct using traces and transactions or sample via `eth_getBalance` | High |
+
+## Data warehousing: connectors & supported DBs
 
 ## Orchestration, data modeling and transformation layer
 
