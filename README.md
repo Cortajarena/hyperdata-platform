@@ -1,10 +1,6 @@
 # About HyperData Platform
 
-![Version](https://img.shields.io/badge/version-0.0.1-blue) ![Build](https://img.shields.io/badge/build-failing-red) ![License](https://img.shields.io/badge/license-open--source-orange)
-
-![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Docker](https://img.shields.io/badge/docker-2496ED?logo=docker&logoColor=white) ![Kubernetes](https://img.shields.io/badge/Helm%20%2B%20K8S-326CE5?logo=kubernetes&logoColor=white)
-
-![Airflow](https://img.shields.io/badge/Airflow-017CEE?logo=apacheairflow&logoColor=white) ![dbt](https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white) ![Spark](https://img.shields.io/badge/Spark-E25A1C?logo=apachespark&logoColor=white) ![Flink](https://img.shields.io/badge/Flink-E6526F?logo=apacheflink&logoColor=white) ![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white) ![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white)
+![Version](https://img.shields.io/badge/version-0.0.1-blue) ![Build](https://img.shields.io/badge/build-failing-red) ![License](https://img.shields.io/badge/license-open--source-orange) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Docker](https://img.shields.io/badge/docker-2496ED?logo=docker&logoColor=white) ![Kubernetes](https://img.shields.io/badge/Helm%20%2B%20K8S-326CE5?logo=kubernetes&logoColor=white) ![Airflow](https://img.shields.io/badge/Airflow-017CEE?logo=apacheairflow&logoColor=white) ![dbt](https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white) ![Spark](https://img.shields.io/badge/Spark-E25A1C?logo=apachespark&logoColor=white) ![Flink](https://img.shields.io/badge/Flink-E6526F?logo=apacheflink&logoColor=white) ![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white) ![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white)
 
 ![Banner](assets/img/banner.png)
 
