@@ -56,9 +56,9 @@ services:
       - node-outputs:/home/hluser/hl/data
     profiles: [node]
 
-  hyperliquid-node-sidecar:
+  hyperdata-node-sidecar:
     build:
-      context: ./hyperliquid-node-sidecar
+      context: ./hyperdata-node-sidecar
     depends_on:
       kafka:
         condition: service_healthy

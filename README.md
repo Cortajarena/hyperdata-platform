@@ -77,7 +77,7 @@ Summary of the layer:
 | Subsystem | Role |
 | :--- | :--- |
 | `services/ingestion/hyperdata-node` | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; replay script (planned). |
-| `services/ingestion/hyperliquid-node-sidecar` (planned) | Watches node outputs, publishes file notifications to Kafka. |
+| `services/ingestion/hyperdata-node-sidecar` (planned) | Watches node outputs, publishes file notifications to Kafka. |
 | `services/ingestion/flink-jobs` | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg). |
 | `services/ingestion/hyperdata-indexer-hyperevm` | HyperEVM event firehose (Envio → Postgres). |
 | `services/ingestion/socket-listeners` (future) | WebSocket feeds for other CEX/DEX venues. |

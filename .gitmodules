@@ -4,6 +4,6 @@
 [submodule "services/ingestion/hyperdata-indexer-hyperevm"]
 	path = services/ingestion/hyperdata-indexer-hyperevm
 	url = git@github.com:Cortajarena/hyperdata-indexer-hyperevm.git
-[submodule "services/ingestion/hyperliquid-node-sidecar"]
-	path = services/ingestion/hyperliquid-node-sidecar
-	url = git@github.com:Cortajarena/hyperliquid-node-sidecar.git
+[submodule "services/ingestion/hyperdata-node-sidecar"]
+	path = services/ingestion/hyperdata-node-sidecar
+	url = git@github.com:Cortajarena/hyperdata-node-sidecar.git

@@ -10,7 +10,7 @@ hyperdata-node          hyperdata-indexer-hyperevm      socket-listeners (future
 file outputs on shared storage    events
    │                           │
    ▼                           ▼
-hyperliquid-node-sidecar ──► Kafka (hyperliquid.node-files, notifications only)
+hyperdata-node-sidecar ──► Kafka (hyperliquid.node-files, notifications only)
    │
    ▼
 flink-jobs/parse-node-outputs ──► Parquet + Iceberg (hypercore.* raw tables)
@@ -31,7 +31,7 @@ HyperCore (and LOB / exchange chains in general) emits **stateful financial data
 │   │         schedule — downstream cannot distinguish it from a live node               │
 │   └─ node also persists periodic_abci_states snapshots (~10k blocks, ~17 min)         │
 │                                                                                       │
-│  hyperliquid-node-sidecar (watcher service)                                           │
+│  hyperdata-node-sidecar (watcher service)                                           │
 │   └─ watches the node output tree ──► Kafka topic hyperliquid.node-files              │
 │      payload = {table, path, date, hour, block_range, size, checksum}                 │
 │      (notifications only — the data stays in files, never in Kafka)                    │
@@ -64,7 +64,7 @@ docker compose --profile node up       # + hyperdata-node (or replay tap) + side
 docker compose --profile warehouse up  # + iceberg-catalog (Nessie) + minio (S3-compatible dev storage)
 ```
 
-Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (creates `hyperliquid.node-files`), `hyperdata-node` + `hyperliquid-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
+Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (creates `hyperliquid.node-files`), `hyperdata-node` + `hyperdata-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
 
 **Commit strategy — the one duality of the system:**
 
@@ -98,7 +98,7 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 | Component | Home | Engine |
 | :--- | :--- | :--- |
 | Replay script | `ingestion/hyperdata-node/scripts/` | bash / Python, file copy |
-| Sidecar (watcher → Kafka) | `ingestion/hyperliquid-node-sidecar` | Python |
+| Sidecar (watcher → Kafka) | `ingestion/hyperdata-node-sidecar` | Python |
 | Parse → Parquet → Iceberg job | `ingestion/flink-jobs/parse-node-outputs` | Flink (PyFlink / Java) |
 | Iceberg maintenance (compaction, snapshot expiry) | `../transformation/spark` | Spark / Trino, Airflow-scheduled |
 
@@ -121,5 +121,5 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 | [`hyperdata-node`](hyperdata-node/) | HyperLiquid node (hl-visor) emitting raw output files + periodic full-state snapshots; replay script (planned). |
 | [`hyperdata-indexer-hyperevm`](hyperdata-indexer-hyperevm/) | Envio HyperIndex event firehose for HyperEVM (chain 999) → Postgres; raw RPC/HyperSync client per its [spec](hyperdata-indexer-hyperevm/docs/full_indexer_spec.md). |
 | `flink-jobs/` | Ingestion-stage Flink jobs (`parse-node-outputs`: JSONL → Parquet → Iceberg). |
-| `hyperliquid-node-sidecar` (planned) | File watcher → Kafka notifications. |
+| `hyperdata-node-sidecar` (planned) | File watcher → Kafka notifications. |
 | `socket-listeners` (future) | WebSocket feeds from other CEX/DEX venues. |
