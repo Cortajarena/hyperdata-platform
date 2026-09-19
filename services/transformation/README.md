@@ -1,0 +1,31 @@
+# Transformation Layer
+
+Everything downstream of raw Iceberg tables: SQL modeling, Iceberg maintenance, and custom distributed jobs.
+
+```
+services/ingestion/  ──►  hypercore.* / hyperevm.* raw Iceberg tables
+                                   │
+                                   ▼
+        ┌─────────────────────────────────────────────┐
+        │  dbt        models, tests, semantic layers  │
+        │  spark      graph jobs, Iceberg maintenance  │
+        │  (future)   serving / ML                    │
+        └─────────────────────────────────────────────┘
+```
+
+| Service | Role |
+| :--- | :--- |
+| [`dbt`](dbt/) | SQL transformation & tests over the warehouse: staging → intermediate → marts; data-quality tests, freshness checks. |
+| [`spark`](spark/) | Custom distributed jobs: Iceberg maintenance (compaction, snapshot expiry — Airflow-scheduled), wallet-graph algorithms, anything beyond SQL. |
+
+**Division of labor:**
+
+- **Ingestion writes raw tables, transformation refines them.** Parsers in `../ingestion/` are deliberately dumb: JSONL → typed rows → Parquet. All decoding/business logic (token transfers from raw logs, book analytics, metrics) lives here as dbt models.
+- **Iceberg maintenance belongs to Spark here**, not to the ingestion Flink jobs — `rewrite_data_files` / `expire_snapshots` run as scheduled batch actions ([Iceberg maintenance procedures](https://iceberg.apache.org/docs/latest/maintenance/)).
+- **Orchestration** (dependencies, schedules) is owned by `platform/airflow`, not by the services themselves.
+
+**Milestones (v0.0.1):**
+
+- [ ] dbt wired to the Iceberg catalog (via Spark/Trino session): staging models over `hypercore.*` raw tables.
+- [ ] Data-quality tests: not-null / unique / accepted-values on core marts.
+- [ ] Spark job skeleton for Iceberg compaction, callable from Airflow.
