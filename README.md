@@ -4,17 +4,28 @@
 
 ![Banner](assets/img/banner.png)
 
-**HyperData** is the open source **[Glassnode](https://docs.glassnode.com/) / [Dune](https://docs.dune.com/) / [CryptoQuant](https://cryptoquant.com/docs) / [Flipside](https://docs.flipsidecrypto.com/) / [Nansen](https://docs.nansen.ai/)** data platform! This README has been proudly written by a human too.
+What is HyperData Platform?
+
+[todo]
+
+**HyperData** is the open source **[Glassnode](https://docs.glassnode.com/) / [Dune](https://docs.dune.com/) / [CryptoQuant](https://cryptoquant.com/docs) / [Flipside](https://docs.flipsidecrypto.com/) / [Nansen](https://docs.nansen.ai/)** data platform! We want Hyperdata to be an open source boilerplate data platform for financial data with 
+
+Why HyperLiquid? Well, HyperLiquid's dual chain architecture is the perfect
 
 **HyperData Platform** is an **open-source** project born with the following premises:
 
-- **Open source, minimalist, easy to deploy** data platform to process financial data from the **[HyperLiquid](https://hyperliquid.gitbook.io/hyperliquid-docs/) Exchange**.
-- With added support for other external financial time-series & **EVM** blockchains, HyperData aims to support (promptly) any **CEX**, **DEX**, **EVM** or similar (like structured financial time series).
+- **Open source, minimalist, easy to deploy** data platform to process financial data from the **[HyperLiquid](https://hyperliquid.gitbook.io/hyperliquid-docs/) Exchange** (or any other event based financial data source, exchange or chain).
+- With added support for other external financial time-series & **EVM** blockchains, HyperData aims to support (promptly) any **CEX**, **DEX**, **EVM** or similar (like structured financial time series). We will provide examples to build a full data model for EVM blockchains (which could also serve as a starting point for non-EVM chains), from raw data to layer based data and semantic models.
 - Easy and minimal local development and replication.
 - Easy and minimal deployment to any cloud provider (mainly **[AWS](https://docs.aws.amazon.com/)** / **[GCP](https://cloud.google.com/docs)** in the beginning) with **[Helm](https://helm.sh/docs/)** and **[Kubernetes](https://kubernetes.io/docs/home/)**.
 - Support for multiple centralized data warehousing options, like **[BigQuery](https://cloud.google.com/bigquery/docs)**, **[ClickHouse](https://clickhouse.com/docs)**, **[Redshift](https://docs.aws.amazon.com/redshift/)**, etc.
 - Built-in centralized monitoring & alerting with **[Grafana](https://grafana.com/docs/)** / **[Prometheus](https://prometheus.io/docs/)** as part of the stack.
-- Efficient and distributed backfills and disaster recovery tools. Support to plug historical data from providers like **[Dwellir](https://docs.dwellir.com/)** or **[QuickNode](https://www.quicknode.com/docs)**.
+- Efficient and distributed backfills and disaster recovery tools. Support to plug historical data (both raw node output archives, parsed **[Parquet](https://parquet.apache.org/docs/)** / **[Apache Iceberg](https://iceberg.apache.org/docs/latest/)** or others) from providers like:
+  - **[Dwellir](https://docs.dwellir.com/)**
+  - **[QuickNode](https://www.quicknode.com/docs)**
+  - **[BitQuery](https://docs.bitquery.io/)**
+  - The Indexing Company
+  - CryptoStruct
 - Built-in minimal UI (simple WebApp + **[Apache Superset](https://superset.apache.org/docs/)**) for data exploration and analysis.
 - Support streaming data ingestion, complex stateful streaming transformation (pre-modeling) and egestion (**[Kafka](https://kafka.apache.org/documentation/)** + **[Flink](https://nightlies.apache.org/flink/flink-docs-stable/)** / **[Spark](https://spark.apache.org/docs/latest/)** / **[Beam](https://beam.apache.org/documentation/)**) for custom behavior.
 - Offline (scheduled) and online (real-time) machine learning and **[MLOps](https://ml-ops.org/)** support.
@@ -25,6 +36,8 @@
 In the future, we may (or may not) add:
 
 - Trading tools and charts (non real time, intended for long-term analysis like Glassnode or Dune).
+- BYOL - bring your own GCP / BigQuery project, requester (you) pays for the query, we maintain the data.
+- BYOL - bring your own OpenRouter / Anthropic / OpenAI, etc. key, use agents to explore the data with your GCP / AWS project.
 - Web3 functionality.
 - Better AI-generated slop UI.
 
@@ -32,32 +45,39 @@ You can check the milestones in each section for version **v0.0.1**.
 
 ## Fast local development & env simulation [pending]
 
-## Ingestion layer: distributed (batch) ingestion & streaming
+## Ingestion layer: distributed (batch) ingestion & stateful streaming
 
 Milestones:
 
 - [ ] Ingestion of **HyperCore** (order diffs, trades, etc.) node outputs.
+- [ ] Supercore node sidecar service in charge of backups and issuing kafka messages.
 
 ### Hypercore ingestion (or any other Limit Order Book or event feeds)
 
-If we are not relying on 
+The full ingestion design — live node, replay-as-tap, sidecar → Kafka notifications, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[services/ingestion/README.md](services/ingestion/README.md)**. Milestones for v0.0.1 are tracked there.
 
-For now, we will be supporting full ingestion of HyperCore's outputs. Later versions will support lightweight and fast ingestion of particular events in **HyperEVM** or the full raw EVM schema:
+Summary of the layer:
 
-| Table | Source RPC Method / Strategy for HyperEVM | Complexity |
-| :--- | :--- | :--- |
-| **`blocks`** | [`eth_getBlockByNumber`](https://docs.infura.io/api/networks/ethereum/json-rpc-methods/eth_getblockbynumber) | Low |
-| **`transactions`** | Extracted from `eth_getBlockByNumber` | Low |
-| **`logs`** | [`eth_getLogs`](https://docs.infura.io/api/networks/ethereum/json-rpc-methods/eth_getlogs) or extracted from transaction receipts | Low |
-| **`traces`** | [`debug_traceBlockByNumber`](https://geth.ethereum.org/docs/interacting-with-geth/rpc/ns-debug#debugtraceblockbynumber) or `trace_block` | High (Requires Archive Node with tracing enabled) |
-| **`contracts`** | Filter traces for `CREATE` operations, then call `eth_getCode` | Medium |
-| **`tokens`** | Call standard **[ERC-20](https://docs.openzeppelin.com/contracts/erc20)** / **[ERC-721](https://docs.openzeppelin.com/contracts/erc721)** view functions (`name()`, `symbol()`) on discovered contracts | Medium |
-| **`token_transfers`** | Filter logs for the standard `Transfer` event signature | Low |
-| **`balances`** | Reconstruct using traces and transactions or sample via `eth_getBalance` | High |
+| Subsystem | Role |
+| :--- | :--- |
+| `services/ingestion/hyperdata-node` | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; replay script (planned). |
+| `services/ingestion/hyperliquid-node-sidecar` (planned) | Watches node outputs, publishes file notifications to Kafka. |
+| `services/ingestion/flink-jobs` | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg). |
+| `services/ingestion/hyperdata-indexer-hyperevm` | HyperEVM event firehose (Envio → Postgres). |
+| `services/ingestion/socket-listeners` (future) | WebSocket feeds for other CEX/DEX venues. |
+
+For HyperEVM raw table extraction (`blocks`, `transactions`, `logs`, `traces`, `contracts`, `tokens`, `token_transfers`, `balances`), see the [indexer spec](services/ingestion/hyperdata-indexer-hyperevm/docs/full_indexer_spec.md).
 
 ## Data warehousing: connectors & supported DBs
 
+TODO:
+[ ] Apache Iceberg & Parquet design
+[ ] Local testing / development 
+[ ] Supported dbs
+
 ## Orchestration, data modeling and transformation layer
+
+Modeling, Iceberg maintenance and custom distributed jobs live in **[services/transformation/README.md](services/transformation/README.md)** (dbt, Spark). Milestones for v0.0.1 are tracked there. Orchestration itself (schedules, dependencies, backfills of tasks) is owned by `platform/airflow`.
 
 ### Machine learning, MLOps and custom distributed jobs
 
