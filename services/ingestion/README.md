@@ -54,6 +54,8 @@ HyperCore (and LOB / exchange chains in general) emits **stateful financial data
 - **Kafka carries metadata, not payloads.** At TB-scale, backfill files are enumerated (e.g. `s5cmd`) and handed to the bounded job directly. Kafka is the live notification bus; it is never a data bus.
 - **Iceberg, not raw Parquet piles.** Checkpoint-aligned commits give atomicity, exactly-once semantics, schema evolution and hidden partitioning. Tables: `hypercore.{fills, order_statuses, raw_book_diffs, snapshots}`.
 
+**Infra placement rule:** infra is defined by the first layer that needs it, and promoted to `platform/` when a second layer consumes it. Kafka therefore lives in this layer's `compose.yaml` for now; when transformation/serving start consuming its topics directly, its definition moves to the platform stack unchanged.
+
 **Commit strategy — the one duality of the system:**
 
 | Path | Trigger | Alignment | Optimization |

@@ -45,6 +45,13 @@ You can check the milestones in each section for version **v0.0.1**.
 
 ## Fast local development & env simulation [pending]
 
+Local stack conventions:
+
+- **Per-layer compose files** (`services/ingestion/compose.yaml`, ...), aggregated by the root `docker-compose.yml` via `include:`. Each layer stack is also runnable standalone: `cd services/ingestion && docker compose up` brings up just that slice.
+- **Project identity:** all compose files set `name: hyperdata-platform`, so included and standalone runs share one project/network identity.
+- **No `version:` key** in compose files (obsolete in Compose ≥ 2.20).
+- **Profiles gate workloads** that need external inputs (e.g. `--profile node` for the live node + sidecar, `--profile warehouse` for catalog + MinIO); shared infra (Kafka) is always-on within its layer.
+
 ## Ingestion layer: distributed (batch) ingestion & stateful streaming
 
 Milestones:

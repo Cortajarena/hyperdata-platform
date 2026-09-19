@@ -1,4 +1,13 @@
-version: "3.8"
+# Thin aggregator: platform-level services + per-layer stacks.
+# Layer stacks are self-contained and also runnable standalone:
+#   cd services/ingestion && docker compose up
+# Conventions: no `version:` key (Compose ≥2.20), project name fixed
+# so included and standalone runs share the same identity. See README.
+
+name: hyperdata-platform
+
+include:
+  - services/ingestion/compose.yaml
 
 x-airflow-common: &airflow-common
   build:
@@ -8,7 +17,7 @@ x-airflow-common: &airflow-common
     - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
   volumes:
     - ./platform/airflow/dags:/opt/airflow/dags
-    - ./services/dbt:/opt/airflow/dbt
+    - ./services/transformation/dbt:/opt/airflow/dbt
     - /var/run/docker.sock:/var/run/docker.sock
   depends_on:
     postgres:
@@ -59,10 +68,10 @@ services:
   # --- Batch Execution Processing ---
   spark-master:
     build:
-      context: ./services/spark
+      context: ./services/transformation/spark
     command: bin/spark-class org.apache.spark.deploy.master.Master
     ports:
       - "7077:7077"
       - "9090:8080"
     volumes:
-      - ./services/spark:/opt/spark/workloads
+      - ./services/transformation/spark:/opt/spark/workloads
