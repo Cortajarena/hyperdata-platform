@@ -56,6 +56,16 @@ HyperCore (and LOB / exchange chains in general) emits **stateful financial data
 
 **Infra placement rule:** infra is defined by the first layer that needs it, and promoted to `platform/` when a second layer consumes it. Kafka therefore lives in this layer's `compose.yaml` for now; when transformation/serving start consuming its topics directly, its definition moves to the platform stack unchanged.
 
+**Running the layer** — this directory is a standalone compose project (also included by the root stack):
+
+```bash
+docker compose up                      # kafka (KRaft) + topic bootstrap — the always-on slice
+docker compose --profile node up       # + hyperdata-node (or replay tap) + sidecar → kafka
+docker compose --profile warehouse up  # + iceberg-catalog (Nessie) + minio (S3-compatible dev storage)
+```
+
+Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (creates `hyperliquid.node-files`), `hyperdata-node` + `hyperliquid-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
+
 **Commit strategy — the one duality of the system:**
 
 | Path | Trigger | Alignment | Optimization |

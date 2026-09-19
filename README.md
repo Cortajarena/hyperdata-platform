@@ -52,6 +52,15 @@ Local stack conventions:
 - **No `version:` key** in compose files (obsolete in Compose ≥ 2.20).
 - **Profiles gate workloads** that need external inputs (e.g. `--profile node` for the live node + sidecar, `--profile warehouse` for catalog + MinIO); shared infra (Kafka) is always-on within its layer.
 
+Usage (from repo root):
+
+```bash
+docker compose up                                          # platform + shared infra (kafka included)
+docker compose --profile node up                           # + hyperdata-node & sidecar
+docker compose --profile node --profile warehouse up       # + Iceberg catalog & MinIO
+cd services/ingestion && docker compose up                 # standalone: just the ingestion slice
+```
+
 ## Ingestion layer: distributed (batch) ingestion & stateful streaming
 
 Milestones:
