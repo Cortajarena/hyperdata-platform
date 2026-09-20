@@ -99,7 +99,7 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 | :--- | :--- | :--- |
 | Replay script | `ingestion/hyperdata-node/scripts/` | bash / Python, file copy |
 | Sidecar (watcher → Kafka) | `ingestion/hyperdata-node-sidecar` | Python |
-| Parse → Parquet → Iceberg job | `ingestion/hyperdata-ingestion-flink/parse-node-outputs` | Flink (PyFlink / Java) |
+| Parse → Parquet → Iceberg job | `ingestion/hyperdata-ingestion-flink/parse-node-outputs` | Flink (Java fat-jar) |
 | Iceberg maintenance (compaction, snapshot expiry) | `../transformation/spark` | Spark / Trino, Airflow-scheduled |
 
 **Milestones (v0.0.1):**
