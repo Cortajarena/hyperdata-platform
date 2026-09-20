@@ -105,7 +105,7 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 **Milestones (v0.0.1):**
 
 - [ ] Sidecar: file watcher → Kafka topic `hyperliquid.node-files` (Kafka in KRaft mode via docker-compose).
-- [ ] Flink job `parse-node-outputs`, bounded mode over a fixture directory (replay-as-backfill PoC).
+- [ ] Flink job `parse-node-outputs`, bounded mode over a corpus window (replay-as-backfill PoC).
 - [ ] Replay script: schedule copies of recorded hourly outputs into the watched directory.
 - [ ] Iceberg REST catalog + `hypercore.*` tables in compose; Parquet writes with schema evolution.
 - [ ] Live unbounded mode: Kafka source → checkpoint-committed Iceberg writes, adaptive file sizing.
@@ -143,18 +143,34 @@ See the [indexer spec](hyperdata-indexer-hyperevm/docs/full_indexer_spec.md) for
 
 Execution plan for the ingestion layer, ordered by **dependency, not by component** — the goal is the shortest path to a demo-able end-to-end slice:
 
-> `docker compose --profile node --profile warehouse up` → replay tap drips fixture files → sidecar publishes to Kafka → Flink commits Parquet into Iceberg → query `hypercore.*` tables and see real rows.
+> one command (`make slice` / `scripts/local-run.sh`) → include-based compose (`node` + `warehouse` profiles) → replay tap drips files from the **real-data corpus** (S3-derived) → sidecar publishes to Kafka → Flink commits Parquet into Iceberg → query `hypercore.*` tables and see real rows.
 
-Decisions already locked (do not re-litigate while executing): Java fat-jar for production jobs (volume + connector maturity; PyFlink only for samples/showcase) · Kafka notifications only, never payloads · replay = same path as live · finalization-only sidecar notifications · Iceberg owns Parquet writing (no bespoke parquet code) · `.gitmodules`-managed repos per service, plain dirs for dev tools.
+Decisions already locked (do not re-litigate while executing): Java fat-jar for production jobs (volume + connector maturity; PyFlink only for samples/showcase) · Kafka notifications only, never payloads · replay = same path as live · finalization-only sidecar notifications · Iceberg owns Parquet writing (no bespoke parquet code) · `.gitmodules`-managed repos per service, plain dirs for dev tools · **real data over synthetic** — an S3 copy of actual node outputs already exists and is the primary dev/staging replay source.
 
 ---
 
-## Phase 0 — Kafka smoke test [next up]
+## Phase 0.5 — Real-data inventory (BLOCKS topic & schema design) [next up]
+
+**Goal:** inspect the S3 copy of actual node outputs and design topics/schemas from **observed reality**, not docs alone.
+
+- [ ] Access check: creds + tooling on the dev VM (`aws` / `s5cmd` / `mc`), bucket name, requester-pays status.
+- [ ] Inventory: directory tree (which tables actually exist), hourly layout vs documented, `periodic_abci_states` cadence in practice, presence of `replica_cmds` / `misc_events`.
+- [ ] Ground-truth schemas: sample records per table — validate the documented L1 shapes (fills, order statuses, raw book diffs, misc events), note drift (missing fields, unexpected ones).
+- [ ] Sizing reality: per-table GB/hour, records/block, file counts/day — replaces the "~100 GB/day" docs estimate; feeds Flink writer sizing (128–512 MB targets) and sidecar checksum cost estimates.
+- [ ] Hour-rollover behavior: how the current hour's file actually grows and finalizes (appends? per-block writes? final rename?) — finalization heuristic in Phase 2 must match observed behavior.
+- [ ] **Topic design decision** (outputs of this phase): single `hyperliquid.node-files` vs per-table topics; partition count & message keys from observed table cardinality; retention estimate.
+- [ ] **Corpus selection**: pick a small contiguous window (e.g. 2–3 hours, ideally spanning a snapshot boundary) to become the dev/staging replay corpus; document its path.
+
+**Acceptance:** a written inventory (this README or a linked note) with real schemas, real sizes, real rollover behavior, and the topic design recorded as locked decisions.
+
+---
+
+## Phase 0 — Kafka smoke test [parallel with 0.5]
 
 **Goal:** prove the compose stack works before anything is built on it.
 
 - [ ] `docker compose up` — kafka (KRaft) + kafka-init come up healthy; `kafka-init` exits 0.
-- [ ] Verify topic: `kafka-topics.sh --bootstrap-server kafka:29092 --describe hyperliquid.node-files` (expect 6 partitions).
+- [ ] Verify topic: `kafka-topics.sh --bootstrap-server kafka:29092 --describe hyperliquid.node-files` (expect 6 partitions; **final count/keying per Phase 0.5 outcome**).
 - [ ] Console round-trip on the in-network listener: produce one JSON notification, consume it back (`kafka:29092`).
 - [ ] Console round-trip on the host listener (`localhost:9092`) — proves the dual-listener config for host-run tooling.
 - [ ] Confirm topic auto-config: `KAFKA_AUTO_CREATE_TOPICS=true` is dev-only; note for prod flip.
@@ -163,27 +179,30 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 
 ---
 
-## Phase 1 — Fixtures + replay tap
+## Phase 1 — Replay tap over the real corpus (+ tiny CI fixtures)
 
-**Goal:** synthetic node outputs so everything downstream is buildable/testable with **no live node and no real data**. This unblocks the sidecar and both Flink modes.
+**Goal:** a tap that drips **real** node outputs into the watched volume, so everything downstream is built and tested against ground-truth data with no live node and no cloud dependency at run time.
 
-**Fixtures** (`fixtures/`, plain dir — dev data, not a service):
+**Corpus** (`corpus/`, plain dir — dev data, gitignored):
 
-- [ ] Mirror the real output tree: `node_fills|node_order_statuses|node_raw_book_diffs|misc_events /hourly/<YYYYMMDD>/<HH>/`.
-- [ ] Match the `--batch-by-block` record shape: one JSON line per block, `{local_time, block_time, block_number, events: [...]}`.
-- [ ] Per-table payloads follow the documented L1 schemas: fills (coin, side, time, px, sz, hash, side_info[2]), order statuses (user, status, order{oid, limitPx, sz, origSz, ...}), raw book diffs (user, oid, coin, side, px, raw_book_diff: new{sz} | update{origSz,newSz} | "remove"), misc events (inner: Deposit/Delegation/Funding/...).
-- [ ] Generate ~3 consecutive hours, ~50–100 blocks each, with **overlapping order lifecycles across hours** (resting order placed in hour 1, updated in hour 2, removed in hour 3) — exercises finalization and correctness semantics.
-- [ ] Deterministic generator script (`fixtures/generate.py`) with a seed — reproducible, committable, small (<100 MB).
-- [ ] One synthetic `.rmp` placeholder under `periodic_abci_states/<date>/<height>.rmp` (binary blob is fine; parsing is out of scope in v0).
+- [ ] Download the Phase-0.5-selected window from S3 into a local corpus dir (preserving the tree).
+- [ ] Verify corpus integrity (checksums vs S3, record counts per file).
+- [ ] Optionally trim: keep whole hours only, so finalization semantics see clean boundaries.
 
 **Replay tap** (`replay-tap/`, plain dir — dev/staging tool, does not earn a submodule):
 
-- [ ] Tiny Python service: copies fixture files into the watched `node-outputs` volume at an env-configurable wall-clock cadence (`REPLAY_DIR`, `REPLAY_CADENCE`, `REPLAY_SPEED`).
-- [ ] Simulates hour rollover: writes into the hourly dir structure as time advances, so the sidecar's finalization logic sees realistic file lifecycle.
+- [ ] Tiny Python service: copies corpus files into the watched `node-outputs` volume at an env-configurable wall-clock cadence (`REPLAY_DIR`, `REPLAY_CADENCE`, `REPLAY_SPEED`).
+- [ ] Simulates hour rollover by advancing through the corpus's date/hour dirs — the sidecar's finalization logic sees the same file lifecycle the live node produces (per Phase-0.5 observations).
 - [ ] Env-config only in v0 — **HTTP trigger endpoint deferred** (see parking lot).
 - [ ] Compose wiring: `replay-tap` service under `node` profile as the alternative to `hyperdata-node` (either/or via `profiles`, sharing the `node-outputs` volume).
+- [ ] Source flexibility: local corpus dir in v0; the same tap reads from the S3 bucket directly in staging (config switch only).
 
-**Acceptance:** with only kafka + tap running, fixture files appear in the volume at the configured cadence with correct hourly layout.
+**CI fixtures** (`fixtures/`, plain dir — demoted from primary to CI/unit-test role):
+
+- [ ] Small deterministic synthetic set (seeded generator, minutes of fake data, a few MB) for fast unit tests of sidecar/Flink without any corpus dependency.
+- [ ] Real-shape records guaranteed by generating against the Phase-0.5 ground-truth schemas.
+
+**Acceptance:** with only kafka + tap running, real files appear in the volume at the configured cadence with the correct hourly layout; CI fixtures fit in a seconds-scale test run.
 
 ---
 
@@ -219,13 +238,13 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 - [ ] Tests: unit (finalization heuristic, checksum, key derivation) + compose integration (tap → sidecar → assert messages on topic with correct payload).
 - [ ] Sidecar README updated with the finalized contract.
 
-**Acceptance:** every fixture file the tap drips produces exactly one (or more, at-least-once) well-formed notification on `hyperliquid.node-files`, verifiable sha256, in table/hour order; `backups/` contains the copied files.
+**Acceptance:** every file the tap drips produces exactly one (or more, at-least-once) well-formed notification on `hyperliquid.node-files`, verifiable sha256, in table/hour order; `backups/` contains the copied files.
 
 ---
 
-## Phase 3 — Flink bounded PoC (fixture dir → Parquet → Iceberg, no Kafka)
+## Phase 3 — Flink bounded PoC (corpus dir → Parquet → Iceberg, no Kafka)
 
-**Goal:** validate the **sink path alone** — catalog, storage, schemas, commits — with zero moving parts (`--source files` over the fixture dir; Kafka deliberately out of the loop).
+**Goal:** validate the **sink path alone** — catalog, storage, schemas, commits — with zero moving parts (`--source files` over the corpus dir; Kafka deliberately out of the loop).
 
 **Cluster (`platform/flink-cluster`):**
 
@@ -239,17 +258,17 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 **Job skeleton (`hyperdata-ingestion-flink/parse-node-outputs`, Java fat-jar):**
 
 - [ ] Maven layout with shade plugin → one self-contained jar per job version (kafka-connector + flink-iceberg + iceberg-runtime bundled).
-- [ ] Bounded entry mode: `--source files --input <dir>` → enumerate fixture files → parse → sink.
-- [ ] Typed rows: POJOs per table mirroring the L1 schemas (see fixtures), `block_time`/`block_number`/`log_index`/`transaction_hash` carried on every record.
+- [ ] Bounded entry mode: `--source files --input <dir>` → enumerate corpus files → parse → sink.
+- [ ] Typed rows: POJOs per table mirroring the L1 schemas (see corpus ground-truth schemas from Phase 0.5), `block_time`/`block_number`/`log_index`/`transaction_hash` carried on every record.
 - [ ] **Iceberg schemas (the design item):** DDLs owned by the job at startup (`CREATE TABLE IF NOT EXISTS`), source of truth = HL L1 data schemas doc:
   - `hypercore.fills`, `hypercore.order_statuses`, `hypercore.raw_book_diffs`, `hypercore.misc_events`;
   - hidden partitioning: `hours(block_time)` on hot tables (diffs, fills), `days(block_time)` on the rest;
   - Iceberg schema evolution from day 1 (additive columns are free).
 - [ ] Sink = official `flink-iceberg` writer (upsert-free append; **Iceberg writes the parquet** — no bespoke parquet code anywhere).
-- [ ] Deterministic row identity `(table, block_number, log_index)` for idempotency; re-running over the same fixtures is a no-op.
+- [ ] Deterministic row identity `(table, block_number, log_index)` for idempotency; re-running over the same corpus window is a no-op.
 - [ ] Compose: `job-submitter` one-shot service pattern (`flink run` against the session JobManager, jar from a local build volume).
 
-**Acceptance:** run bounded PoC over fixtures → `SELECT COUNT(*)` per table via Spark/Trino (or Iceberg REST metadata read) returns the fixture row counts; files land in MinIO in the 10s-of-MB range (fixtures are small — sizing matters at Phase 4+); re-run → no duplicates.
+**Acceptance:** run bounded PoC over the corpus window → `SELECT COUNT(*)` per table via Spark/Trino (or Iceberg REST metadata read) matches the corpus record counts; files land in MinIO (corpus window will be small — sizing targets matter at production volume); re-run → no duplicates.
 
 ---
 
@@ -258,13 +277,14 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 **Goal:** close the loop — tap → sidecar → Kafka → Flink → Iceberg, the first true end-to-end run.
 
 - [ ] `KafkaSource` on `hyperliquid.node-files`; notification → open file from shared storage → parse to EOF → file-completion watermark.
-- [ ] Checkpoint-aligned Iceberg commits: interval 2–5 min, exactly-once; writer parallelism tuned so files land **128–512 MB** in production volume (adaptive sizing per the commit-duality table; fixtures will be smaller — parameterize, don't special-case).
+- [ ] Checkpoint-aligned Iceberg commits: interval 2–5 min, exactly-once; writer parallelism tuned so files land **128–512 MB** at production volume (adaptive sizing per the commit-duality table; corpus window will be smaller — parameterize, don't special-case).
 - [ ] Startup reconciliation: job start does what the sidecar does — full re-scan of finalized-but-uncommitted files (start-order independence again).
-- [ ] Replay == live verified: run the tap, then run the same fixtures through bounded mode, diff the resulting Iceberg tables — must be identical.
+- [ ] Replay == live verified: run the tap, then run the same corpus through bounded mode, diff the resulting Iceberg tables — must be identical.
 - [ ] Failure drills: kill sidecar mid-run (no message loss beyond at-least-once), kill Flink TM mid-checkpoint (no partial commits in the table).
+- [ ] **One-command local run:** `make slice` (or `scripts/local-run.sh`) — brings up the include-based compose (`node` + `warehouse` profiles), starts the tap against the corpus, submits the job, waits for the first commits, prints table row counts. The entire e2e slice must be a single command from a clean checkout.
 - [ ] Compose: extend `job-submitter` with `--source kafka` mode; `make`/README updated.
 
-**Acceptance:** with `--profile node --profile warehouse up`, a fixture drip ends as committed rows in `hypercore.*` queryable end-to-end; duplicates from at-least-once delivery are invisible (idempotent keys).
+**Acceptance:** `make slice` from clean → corpus drip ends as committed rows in `hypercore.*` queryable end-to-end; duplicates from at-least-once delivery are invisible (idempotent keys).
 
 ---
 
@@ -300,9 +320,11 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 ## Dependency map
 
 ```
-Phase 0 (kafka smoke) ─┬─► Phase 1 (fixtures + tap) ─► Phase 2 (sidecar) ─► Phase 4 (e2e) ─► Phase 5 (stateful)
-                        │                                    │
-                        └────────────────────────────────────┴─► Phase 3 (bounded Flink PoC, no kafka needed)
+Phase 0.5 (S3 inventory) ──► topic design locked
+        │
+        ├─► Phase 0 (kafka smoke, parallel) ─┬─► Phase 1 (corpus + tap) ─► Phase 2 (sidecar) ─► Phase 4 (e2e + make slice) ─► Phase 5 (stateful)
+        │                                    │                        │
+        └────────────────────────────────────┴────────────────────────┴─► Phase 3 (bounded Flink PoC — needs corpus only, no sidecar)
 ```
 
-Phase 3 needs Phase 1's fixtures but not the sidecar — it can proceed **in parallel** with Phase 2. Phases 0–1 are hours, not days; the first real engineering decisions live in Phases 2 and 3.
+Phase 3 needs Phase 1's corpus but not the sidecar — it proceeds **in parallel** with Phase 2. Phase 0.5 and Phase 0 are both quick and independent of each other; the first real engineering decisions surface in Phases 2 and 3.
