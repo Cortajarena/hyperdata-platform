@@ -24,8 +24,8 @@ Why HyperLiquid? Well, HyperLiquid's dual chain architecture is the perfect
   - **[Dwellir](https://docs.dwellir.com/)**
   - **[QuickNode](https://www.quicknode.com/docs)**
   - **[BitQuery](https://docs.bitquery.io/)**
-  - The Indexing Company
-  - CryptoStruct
+  - **[The Indexing Company](https://docs.indexing.co/)**
+  - **[CryptoStruct](https://docs.cryptostruct.com/)**
 - Built-in minimal UI (simple WebApp + **[Apache Superset](https://superset.apache.org/docs/)**) for data exploration and analysis.
 - Support streaming data ingestion, complex stateful streaming transformation (pre-modeling) and egestion (**[Kafka](https://kafka.apache.org/documentation/)** + **[Flink](https://nightlies.apache.org/flink/flink-docs-stable/)** / **[Spark](https://spark.apache.org/docs/latest/)** / **[Beam](https://beam.apache.org/documentation/)**) for custom behavior.
 - Offline (scheduled) and online (real-time) machine learning and **[MLOps](https://ml-ops.org/)** support.
@@ -72,13 +72,17 @@ Milestones:
 
 The full ingestion design — live node, replay-as-tap, sidecar → Kafka notifications, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[services/ingestion/README.md](services/ingestion/README.md)**. Milestones for v0.0.1 are tracked there.
 
+### HyperEVM ingestion (or any other EVM blockchain)
+
+HyperEVM exposes standard Ethereum JSON-RPC, so raw ingestion reuses **[ethereum-etl](https://github.com/blockchain-etl/ethereum-etl)** — the generic EVM ETL toolchain behind BigQuery's `crypto_ethereum` dataset — pointed at a local HyperLiquid node (`--serve-eth-rpc`) or any RPC provider. One toolchain covers both temporal modes with identical output: **backfill** (batch block-range extraction) and **real-time** (head-following streaming), both materializing the same raw Parquet/Iceberg tables (`blocks`, `transactions`, `logs`, `traces`, `token_transfers`, ...). The [Envio indexer](services/ingestion/hyperdata-indexer-hyperevm) complements this as the decoded-event firehose (wildcard `Transfer`/`Approval` → Postgres), while ethereum-etl owns the generic raw EVM tables.
+
 Summary of the layer:
 
 | Subsystem | Role |
 | :--- | :--- |
 | `services/ingestion/hyperdata-node` | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; replay script (planned). |
 | `services/ingestion/hyperdata-node-sidecar` (planned) | Watches node outputs, publishes file notifications to Kafka. |
-| `services/ingestion/flink-jobs` | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg). |
+| `services/ingestion/hyperdata-ingestion-flink` | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg). |
 | `services/ingestion/hyperdata-indexer-hyperevm` | HyperEVM event firehose (Envio → Postgres). |
 | `services/ingestion/socket-listeners` (future) | WebSocket feeds for other CEX/DEX venues. |
 

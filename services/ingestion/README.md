@@ -13,7 +13,7 @@ file outputs on shared storage    events
 hyperdata-node-sidecar ──► Kafka (hyperliquid.node-files, notifications only)
    │
    ▼
-flink-jobs/parse-node-outputs ──► Parquet + Iceberg (hypercore.* raw tables)
+hyperdata-ingestion-flink/parse-node-outputs ──► Parquet + Iceberg (hypercore.* raw tables)
 ```
 
 ---
@@ -25,24 +25,24 @@ HyperCore (and LOB / exchange chains in general) emits **stateful financial data
 ```
 ┌─────────────────── RUNTIME (identical in live / replay / backfill) ───────────────────┐
 │                                                                                       │
-│  hyperdata-node (hl-visor) — raw JSONL outputs                                         │
+│  hyperdata-node (hl-visor) — raw JSONL outputs                                        │
 │   ├─ live:   p2p stream writes hourly/<date>/<hour> files                             │
 │   ├─ replay: script copies recorded outputs into the watched dir on a wall-clock      │
-│   │         schedule — downstream cannot distinguish it from a live node               │
+│   │         schedule — downstream cannot distinguish it from a live node              │
 │   └─ node also persists periodic_abci_states snapshots (~10k blocks, ~17 min)         │
 │                                                                                       │
-│  hyperdata-node-sidecar (watcher service)                                           │
+│  hyperdata-node-sidecar (watcher service)                                             │
 │   └─ watches the node output tree ──► Kafka topic hyperliquid.node-files              │
 │      payload = {table, path, date, hour, block_range, size, checksum}                 │
-│      (notifications only — the data stays in files, never in Kafka)                    │
+│      (notifications only — the data stays in files, never in Kafka)                   │
 │                                                                                       │
-│  flink-job: parse-node-outputs (one job, unified bounded/unbounded)                    │
-│   ├─ --source kafka   live + replay: consume notifications, tail files                  │
-│   ├─ --source files   backfill: bounded enumeration of a file list (S3/SSD)            │
-│   └─ core: JSONL → typed rows → group/buffer → Parquet → Iceberg commit                │
+│  flink-job: parse-node-outputs (one job, unified bounded/unbounded)                   │
+│   ├─ --source kafka   live + replay: consume notifications, tail files                │
+│   ├─ --source files   backfill: bounded enumeration of a file list (S3/SSD)           │
+│   └─ core: JSONL → typed rows → group/buffer → Parquet → Iceberg commit               │
 │                                                                                       │
-│  storage: Parquet, Hive layout (date/hour) + Apache Iceberg tables                     │
-│   ├─ local dev: shared SSD volume       ├─ prod: S3 / GCS                              │
+│  storage: Parquet, Hive layout (date/hour) + Apache Iceberg tables                    │
+│   ├─ local dev: shared SSD volume       ├─ prod: S3 / GCS                             │
 │   └─ catalog: REST catalog (Nessie / Polaris class) — one catalog for all engines     │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -99,7 +99,7 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 | :--- | :--- | :--- |
 | Replay script | `ingestion/hyperdata-node/scripts/` | bash / Python, file copy |
 | Sidecar (watcher → Kafka) | `ingestion/hyperdata-node-sidecar` | Python |
-| Parse → Parquet → Iceberg job | `ingestion/flink-jobs/parse-node-outputs` | Flink (PyFlink / Java) |
+| Parse → Parquet → Iceberg job | `ingestion/hyperdata-ingestion-flink/parse-node-outputs` | Flink (PyFlink / Java) |
 | Iceberg maintenance (compaction, snapshot expiry) | `../transformation/spark` | Spark / Trino, Airflow-scheduled |
 
 **Milestones (v0.0.1):**
@@ -114,12 +114,25 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 
 ---
 
+## HyperEVM ingestion (ethereum-etl + Envio)
+
+HyperCore gets the bespoke deltas+snapshots pipeline above; HyperEVM is a standard EVM chain (chain id 999) exposing Ethereum JSON-RPC, so it reuses **[ethereum-etl](https://github.com/blockchain-etl/ethereum-etl)** — the generic EVM ETL toolchain behind BigQuery's `crypto_ethereum` dataset — instead of custom ingestion:
+
+- **Source**: local `hyperdata-node` with `--serve-eth-rpc`, or any RPC provider (Dwellir, QuickNode, ...).
+- **Backfill**: batch extraction over block ranges (`ethereumetl stream` / `extract`), landing the standard raw tables — `blocks`, `transactions`, `logs`, `traces`, `contracts`, `tokens`, `token_transfers`, `balances` — as Parquet/Iceberg, mirroring the BigQuery `crypto_ethereum` schema.
+- **Real-time**: the same toolchain in head-following mode (`ethereumetl stream --start-block <head>`), writing identical tables — same commit duality as HyperCore: batch is range-aligned, live is time/size-aligned.
+- **Division of labor with the Envio indexer**: ethereum-etl owns **generic raw EVM tables** (schema known upfront, all chains); [`hyperdata-indexer-hyperevm`](hyperdata-indexer-hyperevm/) owns **decoded events** (wildcard `Transfer`/`Approval` → Postgres via Envio HyperIndex). Raw first, decode later — the same principle as the HyperCore pipeline.
+
+See the [indexer spec](hyperdata-indexer-hyperevm/docs/full_indexer_spec.md) for the phased raw-table design (Phase 1 firehose → Phase 2 decoded via dbt → Phase 3 traces/balances).
+
+---
+
 ## Other ingestion services
 
 | Service | What it does |
 | :--- | :--- |
 | [`hyperdata-node`](hyperdata-node/) | HyperLiquid node (hl-visor) emitting raw output files + periodic full-state snapshots; replay script (planned). |
-| [`hyperdata-indexer-hyperevm`](hyperdata-indexer-hyperevm/) | Envio HyperIndex event firehose for HyperEVM (chain 999) → Postgres; raw RPC/HyperSync client per its [spec](hyperdata-indexer-hyperevm/docs/full_indexer_spec.md). |
-| `flink-jobs/` | Ingestion-stage Flink jobs (`parse-node-outputs`: JSONL → Parquet → Iceberg). |
+| [`hyperdata-indexer-hyperevm`](hyperdata-indexer-hyperevm/) | Envio HyperIndex event firehose for HyperEVM (chain 999) → Postgres (decoded events); raw EVM tables via ethereum-etl — see above. |
+| `hyperdata-ingestion-flink/` | Ingestion-stage Flink jobs (`parse-node-outputs`: JSONL → Parquet → Iceberg). |
 | `hyperdata-node-sidecar` (planned) | File watcher → Kafka notifications. |
 | `socket-listeners` (future) | WebSocket feeds from other CEX/DEX venues. |
