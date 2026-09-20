@@ -7,3 +7,6 @@
 [submodule "services/ingestion/hyperdata-node-sidecar"]
 	path = services/ingestion/hyperdata-node-sidecar
 	url = git@github.com:Cortajarena/hyperdata-node-sidecar.git
+[submodule "services/ingestion/hyperdata-ingestion-flink"]
+	path = services/ingestion/hyperdata-ingestion-flink
+	url = git@github.com:Cortajarena/hyperdata-ingestion-flink.git
