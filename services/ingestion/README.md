@@ -7,11 +7,14 @@ hyperdata-node          hyperdata-indexer-hyperevm      socket-listeners (future
    │   │                        │                              │
    │   └── snapshots            │                              │
    ▼                           ▼                              ▼
-file outputs on shared storage    events
+JSONL appended continuously    events
    │                           │
    ▼                           ▼
-hyperdata-node-sidecar ──► Kafka (hyperliquid.node-files, notifications only)
+hyperdata-node-sidecar (line tailer)
    │
+   ├─► data-plane topics (per table, streamed lines):
+   │     hyperliquid.book-diffs / .order-statuses / .fills   key: coin
+   └─► seal topic (per finalized hour-file): hyperliquid.node-files
    ▼
 hyperdata-ingestion-flink/parse-node-outputs ──► Parquet + Iceberg (hypercore.* raw tables)
 ```
@@ -25,21 +28,23 @@ HyperCore (and LOB / exchange chains in general) emits **stateful financial data
 ```
 ┌─────────────────── RUNTIME (identical in live / replay / backfill) ───────────────────┐
 │                                                                                       │
-│  hyperdata-node (hl-visor) — raw JSONL outputs                                        │
-│   ├─ live:   p2p stream writes hourly/<date>/<hour> files                             │
-│   ├─ replay: script copies recorded outputs into the watched dir on a wall-clock      │
-│   │         schedule — downstream cannot distinguish it from a live node              │
-│   └─ node also persists periodic_abci_states snapshots (~10k blocks, ~17 min)         │
+│  hyperdata-node (hl-visor) — raw JSONL outputs, appended continuously                 │
+│   ├─ live:   p2p stream appends to hourly/<date>/<hour> files (~20 MB/s combined)     │
+│   ├─ replay: tap progressively appends recorded files — indistinguishable downstream  │
+│   └─ node also persists periodic_abci_states snapshots (~10k blocks)                  │
 │                                                                                       │
-│  hyperdata-node-sidecar (watcher service)                                             │
-│   └─ watches the node output tree ──► Kafka topic hyperliquid.node-files              │
-│      payload = {table, path, date, hour, block_range, size, checksum}                 │
-│      (notifications only — the data stays in files, never in Kafka)                   │
+│  hyperdata-node-sidecar (line tailer)                                                 │
+│   ├─ tails growth (poll ~250 ms), reads appended bytes, tracks line boundaries        │
+│   ├─ data plane: one message per new LINE ──► per-table topics                        │
+│   │    hyperliquid.book-diffs / .order-statuses / .fills   (key: coin)                │
+│        {table, path, date, hour, block_range, size, sha256, finalized_at}             │
+│        (durability watermark + backup trigger; latency lives in the data plane)       │
+│   └─ seal plane: one message per finalized HOUR-FILE ──► hyperliquid.node-files       │
 │                                                                                       │
 │  flink-job: parse-node-outputs (one job, unified bounded/unbounded)                   │
-│   ├─ --source kafka   live + replay: consume notifications, tail files                │
+│   ├─ --source kafka   live + replay: stream lines, checkpoint-aligned commits         │
 │   ├─ --source files   backfill: bounded enumeration of a file list (S3/SSD)           │
-│   └─ core: JSONL → typed rows → group/buffer → Parquet → Iceberg commit               │
+│   └─ core: JSONL → typed rows → Parquet → Iceberg commit                              │
 │                                                                                       │
 │  storage: Parquet, Hive layout (date/hour) + Apache Iceberg tables                    │
 │   ├─ local dev: shared SSD volume       ├─ prod: S3 / GCS                             │
@@ -49,9 +54,9 @@ HyperCore (and LOB / exchange chains in general) emits **stateful financial data
 
 **Why this shape:**
 
-- **Replay = live, exactly.** The replay script never invokes the node — historical outputs are copied into the output directory as a fake tap. Downstream (sidecar → Kafka → Flink) cannot distinguish replay from production. One code path tests the entire pipeline.
-- **Backfill = same job, different source.** Flink's bounded mode (`--source files`) runs the identical parse core. No bespoke distributed-parser service — it is all one Flink job.
-- **Kafka carries metadata, not payloads.** At TB-scale, backfill files are enumerated (e.g. `s5cmd`) and handed to the bounded job directly. Kafka is the live notification bus; it is never a data bus.
+- **Line streaming, not file batching.** The node appends continuously; waiting for hour-file seals would add up to 1h latency and force 52 GB commit units. New lines flow to Kafka as appended (data plane); hour-file **seals** stay as a low-rate auxiliary plane for durability/reconciliation and backups. Kafka *is* a data plane here — ~20 MB/s sustained, routine Kafka load, sized accordingly.
+- **Replay = live, exactly.** The replay tap progressively appends recorded outputs into the watched tree — same growth pattern as live, downstream cannot distinguish. One code path tests the entire pipeline.
+- **Backfill = same job, different source.** Flink's bounded mode (`--source files`) runs the identical parse core. At TB-scale, backfill files are enumerated (e.g. `s5cmd`) and handed to the bounded job directly — Kafka never carries bulk reprocessing.
 - **Iceberg, not raw Parquet piles.** Checkpoint-aligned commits give atomicity, exactly-once semantics, schema evolution and hidden partitioning. Tables: `hypercore.{fills, order_statuses, raw_book_diffs, snapshots}`.
 
 **Infra placement rule:** infra is defined by the first layer that needs it, and promoted to `platform/` when a second layer consumes it. Kafka therefore lives in this layer's `compose.yaml` for now; when transformation/serving start consuming its topics directly, its definition moves to the platform stack unchanged.
@@ -64,7 +69,7 @@ docker compose --profile node up       # + hyperdata-node (or replay tap) + side
 docker compose --profile warehouse up  # + iceberg-catalog (Nessie) + minio (S3-compatible dev storage)
 ```
 
-Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (creates `hyperliquid.node-files`), `hyperdata-node` + `hyperdata-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
+Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (creates the four locked topics), `hyperdata-node` + `hyperdata-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
 
 **Commit strategy — the one duality of the system:**
 
@@ -97,14 +102,14 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 
 | Component | Home | Engine |
 | :--- | :--- | :--- |
-| Replay script | `ingestion/hyperdata-node/scripts/` | bash / Python, file copy |
-| Sidecar (watcher → Kafka) | `ingestion/hyperdata-node-sidecar` | Python |
+| Replay tap (progressive append) | `ingestion/replay-tap/` (planned) | Python |
+| Sidecar (line tailer → Kafka) | `ingestion/hyperdata-node-sidecar` | Python |
 | Parse → Parquet → Iceberg job | `ingestion/hyperdata-ingestion-flink/parse-node-outputs` | Flink (Java fat-jar) |
 | Iceberg maintenance (compaction, snapshot expiry) | `../transformation/spark` | Spark / Trino, Airflow-scheduled |
 
 **Milestones (v0.0.1):**
 
-- [ ] Sidecar: file watcher → Kafka topic `hyperliquid.node-files` (Kafka in KRaft mode via docker-compose).
+- [ ] Sidecar (line tailer): appended lines → per-table data-plane topics + hour-file seals on `hyperliquid.node-files` (Kafka in KRaft mode via docker-compose).
 - [ ] Flink job `parse-node-outputs`, bounded mode over a corpus window (replay-as-backfill PoC).
 - [ ] Replay script: schedule copies of recorded hourly outputs into the watched directory.
 - [ ] Iceberg REST catalog + `hypercore.*` tables in compose; Parquet writes with schema evolution.
@@ -145,7 +150,7 @@ Execution plan for the ingestion layer, ordered by **dependency, not by componen
 
 > one command (`make slice` / `scripts/local-run.sh`) → include-based compose (`node` + `warehouse` profiles) → replay tap drips files from the **real-data corpus** (local Jun-10 dump) → sidecar publishes to Kafka → Flink commits Parquet into Iceberg → query `hypercore.*` tables and see real rows.
 
-Decisions already locked (do not re-litigate while executing): Java fat-jar for production jobs (volume + connector maturity; PyFlink only for samples/showcase) · Kafka notifications only, never payloads · replay = same path as live · finalization-only sidecar notifications · Iceberg owns Parquet writing (no bespoke parquet code) · `.gitmodules`-managed repos per service, plain dirs for dev tools · **real data over synthetic** — a local dump of actual node outputs (two hours, Jun 10) already exists at `/nvme0n1-disk/data/hl-node-data/` and is the primary dev/staging replay source.
+Decisions already locked (do not re-litiate while executing): Java fat-jar for production jobs (volume + connector maturity; PyFlink only for samples/showcase) · **line streaming, not file batching — new lines flow to Kafka as appended; the warehouse path must not inherit hour-file latency or 52 GB commit units** · per-table data-plane topics (stateful/analytic consumers differ per table) + hour-file seals as a low-rate auxiliary topic · replay = same path as live (progressive append) · Iceberg owns Parquet writing (no bespoke parquet code) · `.gitmodules`-managed repos per service, plain dirs for dev tools · **real data over synthetic** — a local dump of actual node outputs (two hours, Jun 10) already exists at `/nvme0n1-disk/data/hl-node-data/` and is the primary dev/staging replay source.
 
 ---
 
@@ -160,7 +165,30 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 - [x] Ground-truth schemas: `--batch-by-block` shape confirmed (`{local_time, block_time, block_number, events: [...]}`), one event per line in this capture; fills carry `px/sz/side/dir/closedPnl/hash/oid/crossed/fee/tid/cloid/feeToken/twapId`, order statuses carry full order objects (`oid, limitPx, sz, origSz, orderType, tif, ...`), book diffs carry `raw_book_diff: new{sz} | update{origSz,newSz} | "remove"`.
 - [x] Sizing reality (per hour, Jun 10): **order_statuses ~52 GB/h** (84.5M lines, ~1,500 lines/block!) · book_diffs ~15 GB/h · fills ~0.5 GB/h · snapshots ~1.3 GB each. Block rate **~15.6 blocks/s** (56k blocks/h). Extrapolated: **~1.7 TB/day total, order_statuses alone ~1.2 TB/day** — an order of magnitude above the docs' "~100 GB/day"; sizing for Flink writers, Kafka rates and sidecar checksums starts from *these* numbers.
 - [x] Hour-rollover behavior: one file per table per hour, appended during the hour, finalized at rollover → sidecar finalization = "hour dir no longer current", no per-block files.
-- [ ] **Topic design decision** (from the above): single `hyperliquid.node-files` vs per-table topics; partition count & message keys; retention estimate. Given ~1,500 lines/block on order_statuses, notifications stay tiny (one per finalized file per table per hour — dozens/day), so the notification topic is trivially small either way.
+- [x] **Topic design decision** (from the above): **per-table line-streaming topics + an hour-file seal topic** — locked; see "Kafka topic design" below.
+- [x] **Schema census** (head/mid/tail sampling, Jun-10 files): all three tables are one-JSON-event-per-line `{local_time, block_time, block_number, events:[...]}`; book_diffs: 3 diff variants (`new` 47%, `remove` 51%, `update` 1.4%); fills: 16-field payload, sparse optionals (`cloid` 76%, `deployerFee` 61%, `builderFee` 3%, `builder` 5%, `priorityGas` 2%, `twapId` ~5% non-null), 9 `dir` values, **`feeToken` NOT always USDC** (10+ aligned-quote tokens); order_statuses: **11 `status` values** (6 rejection types), 5 `tif`, 4 `orderType`, `hash` null in 69%; **namespaced coins ≈ 40% of traffic** (`xyz:*`, `cash:*`, ...) → category columns stay strings. Raw-schema consequences: nullable everywhere, string-typed categories, px/sz as strings (decimals resolved in dbt staging), carry both `local_time` and `block_time` (free ingestion-lag telemetry).
+
+**Acceptance:** inventory + census + topic design written down (this section + the one below). Phase 0.5 complete.
+
+---
+
+## Kafka topic design (locked)
+
+The sidecar **tails appended lines** — Kafka is a **data plane** for the three streams, plus a **seal plane** for durability. Per-table topics because processing diverges: fills → trade analytics; book diffs → (future) stateful book reconstruction; order statuses → lifecycle analytics. Different consumers, different state, 100× rate differences.
+
+| Topic | Plane | Contents | Key | Rate (Jun-10 measured) | Partitions | Retention |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `hyperliquid.book-diffs` | data | diff lines, streamed | `coin` | ~15.6k lines/s, ~4.5 MB/s | 6 | 72h |
+| `hyperliquid.order-statuses` | data | status lines, streamed | `coin` | ~23.5k lines/s, ~14 MB/s | 6 | 72h |
+| `hyperliquid.fills` | data | fill lines, streamed | `coin` | ~200 lines/s, <1 MB/s | 3 | 72h |
+| `hyperliquid.node-files` | seal | finalized hour-files: `{table, path, date, hour, block_range, size, sha256, finalized_at}` | `table\|date\|hour` | ~3/day | 3 | 72h |
+| `hyperliquid.node-snapshots` | seal (parked) | `.rmp` snapshot events — design pending; snapshots will later serve as **book seals / health-check oracles** | height | ~4-6/h | 3 | TBD |
+
+- **One record = one message** (no batch framing): ~40k msg/s combined is routine Kafka; per-record offsets map cleanly to Flink exactly-once. Values are raw node JSON lines, unchanged.
+- **Key = `coin`** on data topics: per-coin ordered partitions — the future stateful book job gets all diffs for a coin in one partition, in order, for free.
+- **Seals** trigger backups (whole, immutable, checksummed files), provide the reconciliation watermark ("durable ≤ here"), and give backfill its file-level dedup keys.
+- **Sizing (critical):** combined ~20 MB/s sustained, ~1.6 TB/day raw (~5 TB broker disk for 72h retention, less with zstd — producers compress). Broker, partition and consumer-poll tuning must be sized from these numbers, not from the old "notification bus" assumption. Retention is a safety net, not the archive — Iceberg is the archive; seals prove it.
+- **Latency budget:** node append → sidecar poll (250 ms) → Kafka → Flink → checkpoint commit (2–5 min) = seconds-to-minutes end to end; the seal plane exists for durability, not latency.
 - [x] **Corpus selection**: the Jun-10 two-hour capture **is** the corpus — complete tree, spans ten snapshot boundaries; path documented here. (Optionally trim to a subset for faster CI.)
 
 **Acceptance:** a written inventory (this section) with real schemas, real sizes, real rollover behavior — done. Remaining: topic design decision recorded as locked.
@@ -169,78 +197,63 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 
 ## Phase 0 — Kafka smoke test [parallel with 0.5]
 
-**Goal:** prove the compose stack works before anything is built on it.
+**Goal:** prove the compose stack works before anything is built on it — now against the **locked four-topic design**.
 
 - [ ] `docker compose up` — kafka (KRaft) + kafka-init come up healthy; `kafka-init` exits 0.
-- [ ] Verify topic: `kafka-topics.sh --bootstrap-server kafka:29092 --describe hyperliquid.node-files` (expect 6 partitions; **final count/keying per Phase 0.5 outcome**).
-- [ ] Console round-trip on the in-network listener: produce one JSON notification, consume it back (`kafka:29092`).
-- [ ] Console round-trip on the host listener (`localhost:9092`) — proves the dual-listener config for host-run tooling.
+- [ ] Update `kafka-init` to create the locked topics: `hyperliquid.book-diffs` (6p), `hyperliquid.order-statuses` (6p), `hyperliquid.fills` (3p), `hyperliquid.node-files` (3p, seals). (`node-snapshots` parked.)
+- [ ] Verify topics: `kafka-topics.sh --bootstrap-server kafka:29092 --describe` each — partitions per the table above.
+- [ ] Console round-trip in-network (`kafka:29092`): produce one sample line to `hyperliquid.book-diffs`, consume it back.
+- [ ] Console round-trip on the host listener (`localhost:9092`).
 - [ ] Confirm topic auto-config: `KAFKA_AUTO_CREATE_TOPICS=true` is dev-only; note for prod flip.
 
-**Acceptance:** a message produced inside the compose network is consumable both in-network and from the host.
+**Acceptance:** messages produced inside the compose network are consumable both in-network and from the host, on all four topics.
 
 ---
 
 ## Phase 1 — Replay tap over the real corpus (+ tiny CI fixtures)
 
-**Goal:** a tap that drips **real** node outputs into the watched volume, so everything downstream is built and tested against ground-truth data with no live node and no cloud dependency at run time.
+**Goal:** a tap that **progressively appends** real node outputs into the watched volume, so everything downstream is built and tested against ground-truth data with no live node — and with the same *growth pattern* a live node produces.
 
 **Corpus** (the Jun-10 two-hour local dump; plain dir — dev data, gitignored):
 
 - [ ] Point the tap at `/nvme0n1-disk/data/hl-node-data/data_stream_with_block_info/` (or copy the selected window into a smaller `corpus/` dir for CI speed).
 - [ ] Verify corpus integrity (record counts per file vs the inventory numbers).
-- [ ] Optionally trim: keep whole hours only, so finalization semantics see clean boundaries.
 
 **Replay tap** (`replay-tap/`, plain dir — dev/staging tool, does not earn a submodule):
 
-- [ ] Tiny Python service: copies corpus files into the watched `node-outputs` volume at an env-configurable wall-clock cadence (`REPLAY_DIR`, `REPLAY_CADENCE`, `REPLAY_SPEED`).
-- [ ] Simulates hour rollover by advancing through the corpus's date/hour dirs — the sidecar's finalization logic sees the same file lifecycle the live node produces (per Phase-0.5 observations).
+- [ ] Python service: **progressive append** — reads a corpus file in growing chunks (e.g. N MB per tick) and appends them to the target file in the watched volume, at an env-configurable cadence (`REPLAY_DIR`, `REPLAY_CADENCE`, `REPLAY_SPEED`). Whole-file copy is NOT replay: the sidecar tailer must see the same continuous append pattern live produces; chunked append also lets us test partial-line handling and offset crash-recovery.
+- [ ] Simulates hour rollover: when a corpus hour-file is exhausted, rotate to the next hour (touch the seal boundary) and continue with the next file.
 - [ ] Env-config only in v0 — **HTTP trigger endpoint deferred** (see parking lot).
 - [ ] Compose wiring: `replay-tap` service under `node` profile as the alternative to `hyperdata-node` (either/or via `profiles`, sharing the `node-outputs` volume).
 - [ ] Source flexibility: local corpus dir in v0; the same tap reads from the dump dir directly, and from an S3/GCS bucket in staging (config switch only).
 
-**CI fixtures** (`fixtures/`, plain dir — demoted from primary to CI/unit-test role):
+**CI fixtures** (`fixtures/`, plain dir — CI/unit-test role):
 
 - [ ] Small deterministic synthetic set (seeded generator, minutes of fake data, a few MB) for fast unit tests of sidecar/Flink without any corpus dependency.
 - [ ] Real-shape records guaranteed by generating against the Phase-0.5 ground-truth schemas.
 
-**Acceptance:** with only kafka + tap running, real files appear in the volume at the configured cadence with the correct hourly layout; CI fixtures fit in a seconds-scale test run.
+**Acceptance:** with only kafka + tap running, the watched volume shows corpus files growing by appends (not appearing whole), hour boundaries rotating on schedule; a tailing reader observes byte-growth in small increments with occasional partial (non-newline-terminated) chunk tails.
 
 ---
 
-## Phase 2 — Sidecar MVP (`hyperdata-node-sidecar`)
+## Phase 2 — Sidecar MVP (`hyperdata-node-sidecar`) — line tailer
 
-**Goal:** watcher → Kafka notifications + local backup, with the contract finalized below.
+**Goal:** tail appended lines → per-table data-plane topics + hour-file seal topic + local backup. Full build spec: [`hyperdata-node-sidecar/README.md`](hyperdata-node-sidecar/README.md) (the contract below summarizes it).
 
-**Contract (lock these before coding):**
+**Contract (summary — details in the sidecar README):**
 
-- [ ] Discovery: **full re-scan on startup** (idempotent re-emit of every finalized file) so component start order never matters; steady-state: watch loop (inotify where available, size/mtime polling fallback — inotify does not fire reliably on bind mounts/volumes).
-- [ ] Finalization semantics: **notify on finalized files only** (hour rolled over / stable-size heuristic, e.g. unchanged size across N polls). The current hour's still-growing file is *not* notified. Latency ≤ 1 hour by design; low-latency tailing is the future stateful Flink tier, not the sidecar.
-- [ ] Notification payload: `{table, path, date, hour, block_range, size, sha256, finalized_at}` — sha256 computed by the sidecar, trusted downstream.
-- [ ] Kafka message key: `table + date + hour` → per-partition ordering per table.
-- [ ] Delivery: **at-least-once** with retries; consumers are idempotent (deterministic keys), so duplicates are safe.
-- [ ] Table set: `node_fills`, `node_order_statuses`, `node_raw_book_diffs`, `misc_events` + `periodic_abci_states` (as archive-only notification).
+- [ ] **Tailer, not watcher**: poll growth (~250 ms default) on current-hour files per table; read appended bytes; track line boundaries (partial trailing line held back until newline arrives).
+- [ ] **Data plane**: one Kafka message per new line → per-table topic, keyed `coin`. Values = raw node JSON lines, unchanged.
+- [ ] **Seal plane**: on hour rollover, publish `{table, path, date, hour, block_range, size, sha256, finalized_at}` → `hyperliquid.node-files`, keyed `table|date|hour`.
+- [ ] **Offset state**: per-file byte offsets persisted (after Kafka ack) to a local state store; crash → resume from offset → at-least-once (downstream exactly-once absorbs duplicates).
+- [ ] **Startup reconciliation**: full scan of watched tree, resume from persisted offsets — start-order independent.
+- [ ] **Backups**: pluggable `BackupSink` (`backup(local_path) -> remote_ref`); v0 = local SSD copy; seals are the trigger. GCS/S3 later (parking lot).
+- [ ] **Observability**: Prometheus metrics (lines_published, bytes_read, publish_lag vs block_time, tail_offset_lag, seals_emitted, partial_line_held_bytes) + structured logs + graceful shutdown.
+- [ ] **Hot path engineering**: ~20 MB/s, ~40k msg/s at Jun-10 rates — confluent-kafka producer with `idempotence=true`, `acks=all`, zstd, tuned linger/batch; per-table tailer threads.
+- [ ] Tests: unit (line-boundary handling, offset persistence/resume, seal sha256, coin-key derivation) + compose integration (tap → sidecar → assert per-table messages + seal on rollover).
+- [ ] Sidecar README kept as the canonical contract (already written; update as implementation lands).
 
-**Backups ("save to SSD, GCS, AWS or others"):**
-
-- [ ] Pluggable sink interface (`BackupSink`): `backup(local_path) -> remote_ref`.
-- [ ] v0 implementation: local SSD copy (same volume, `backups/` prefix) — enough to define and test the interface.
-- [ ] GCS / S3 implementations slot behind the same interface **later** (parking lot) — no cloud SDKs in the MVP.
-
-**Others (the "and more"):**
-
-- [ ] Prometheus `/metrics`: files_seen, bytes_copied, publish_success/failure, watcher_lag_seconds, last_finalized_hour.
-- [ ] Structured logs with the same fields as the notification payload (one line per event).
-- [ ] Graceful shutdown: finish in-flight publish, then exit (clean compose restarts).
-
-**Engineering:**
-
-- [ ] Language: Python (watchdog/polling + kafka-python or confluent-kafka).
-- [ ] Compose: `node` profile, `depends_on: kafka[healthy]`, mounts `node-outputs` at `WATCH_DIR`.
-- [ ] Tests: unit (finalization heuristic, checksum, key derivation) + compose integration (tap → sidecar → assert messages on topic with correct payload).
-- [ ] Sidecar README updated with the finalized contract.
-
-**Acceptance:** every file the tap drips produces exactly one (or more, at-least-once) well-formed notification on `hyperliquid.node-files`, verifiable sha256, in table/hour order; `backups/` contains the copied files.
+**Acceptance:** with the tap appending, every appended chunk reaches the matching data-plane topic as messages (one per complete line, `coin`-keyed, in order); on hour rollover, exactly one seal per file lands on `hyperliquid.node-files` with correct sha256/block_range; kill the sidecar mid-tail → restart resumes from persisted offsets (re-published lines absorbed downstream); `backups/` contains sealed files.
 
 ---
 
@@ -263,7 +276,7 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 - [ ] Bounded entry mode: `--source files --input <dir>` → enumerate corpus files → parse → sink.
 - [ ] Typed rows: POJOs per table mirroring the L1 schemas (see corpus ground-truth schemas from Phase 0.5), `block_time`/`block_number`/`log_index`/`transaction_hash` carried on every record.
 - [ ] **Iceberg schemas (the design item):** DDLs owned by the job at startup (`CREATE TABLE IF NOT EXISTS`), source of truth = HL L1 data schemas doc:
-  - `hypercore.fills`, `hypercore.order_statuses`, `hypercore.raw_book_diffs`, `hypercore.misc_events`;
+  - `hypercore.fills`, `hypercore.order_statuses`, `hypercore.raw_book_diffs` (no `misc_events` in v0 — not in the capture);
   - hidden partitioning: `hours(block_time)` on hot tables (diffs, fills), `days(block_time)` on the rest;
   - Iceberg schema evolution from day 1 (additive columns are free).
 - [ ] Sink = official `flink-iceberg` writer (upsert-free append; **Iceberg writes the parquet** — no bespoke parquet code anywhere).
@@ -278,9 +291,9 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 
 **Goal:** close the loop — tap → sidecar → Kafka → Flink → Iceberg, the first true end-to-end run.
 
-- [ ] `KafkaSource` on `hyperliquid.node-files`; notification → open file from shared storage → parse to EOF → file-completion watermark.
+- [ ] `KafkaSource` on the three data-plane topics (per-table source parallelism); lines arrive pre-parsed as single messages — no file-opening step, no file-completion watermark; the **seal topic is consumed separately** as a reconciliation watermark (drives Iceberg maintenance decisions and lag metrics).
 - [ ] Checkpoint-aligned Iceberg commits: interval 2–5 min, exactly-once; writer parallelism tuned so files land **128–512 MB** at production volume (adaptive sizing per the commit-duality table; corpus window will be smaller — parameterize, don't special-case).
-- [ ] Startup reconciliation: job start does what the sidecar does — full re-scan of finalized-but-uncommitted files (start-order independence again).
+- [ ] Startup reconciliation: bounded re-scan of finalized-but-uncommitted files (start-order independence again).
 - [ ] Replay == live verified: run the tap, then run the same corpus through bounded mode, diff the resulting Iceberg tables — must be identical.
 - [ ] Failure drills: kill sidecar mid-run (no message loss beyond at-least-once), kill Flink TM mid-checkpoint (no partial commits in the table).
 - [ ] **One-command local run:** `make slice` (or `scripts/local-run.sh`) — brings up the include-based compose (`node` + `warehouse` profiles), starts the tap against the corpus, submits the job, waits for the first commits, prints table row counts. The entire e2e slice must be a single command from a clean checkout.
