@@ -8,9 +8,22 @@ What is HyperData Platform?
 
 [todo]
 
-**HyperData** is the open source **[Glassnode](https://docs.glassnode.com/) / [Dune](https://docs.dune.com/) / [CryptoQuant](https://cryptoquant.com/docs) / [Flipside](https://docs.flipsidecrypto.com/) / [Nansen](https://docs.nansen.ai/)** data platform! We want Hyperdata to be an open source boilerplate data platform for financial data with 
+**HyperData** is the open source **[Glassnode](https://docs.glassnode.com/) / [Dune](https://docs.dune.com/) / [CryptoQuant](https://cryptoquant.com/docs) / [Flipside](https://docs.flipsidecrypto.com/) / [Nansen](https://docs.nansen.ai/)** data platform! 
 
-Why HyperLiquid? Well, HyperLiquid's dual chain architecture is the perfect
+We want Hyperdata to be an open source boilerplate data platform for financial data with core support for any event based financial data system (like CLOB / order book / CEX exchanges) and EVM (or any other VM) based blockchains.
+
+## Why HyperLiquid? 
+Well, HyperLiquid's dual chain architecture is the perfect example to build a fully capable data platform for financial time series and blockchain virtual machines:
+- HyperCore poses a challenge in terms of real data volume (billions of events) and potential stateful processing (only L4 address book, so allows us to track per address, per asset state).
+- HyperEVM is the perfect example of a classic EVM where we can process typical raw EVM data, parse smart contract calls, build data models on top etc. Similarly to how Dune / Glassnode build transformations, abstractions and metrics on top. For this we will approach EVM in an ELT manner, smart contract calls etc will be seen as bronze transformations.
+
+## Status [WIP]
+
+This is an initial draft. We are currently working on the ingestion pipelines **[services/ingestion/README.md](services/ingestion/README.md)**, with ETA 1-2 weeks to support full ingestion of HyperCore into a central Iceberg catalog. Next steps will be adding EVM near real time ingestion, orchestration and backfills both for HyperCore and HyperEVM, and basic **dbt** modeling to start with.
+
+Then we will start building IaC and kubernetes deployments.
+
+---
 
 **HyperData Platform** is an **open-source** project born with the following premises:
 
@@ -66,11 +79,11 @@ cd services/ingestion && docker compose up                 # standalone: just th
 Milestones:
 
 - [ ] Ingestion of **HyperCore** (order diffs, trades, etc.) node outputs.
-- [ ] Supercore node sidecar service in charge of backups and issuing kafka messages.
+- [ ] HyperCore node sidecar service in charge of backups and issuing kafka messages for all different tables (topics). Tailing polling approach (near real time is good enough).
 
 ### Hypercore ingestion (or any other Limit Order Book or event feeds)
 
-The full ingestion design — live node, replay-as-tap, sidecar → Kafka notifications, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[services/ingestion/README.md](services/ingestion/README.md)**. Milestones for v0.0.1 are tracked there.
+The full ingestion design — live node, replay-as-tap (progressive append), sidecar line-tailing to per-table Kafka topics, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[services/ingestion/README.md](services/ingestion/README.md)**. Milestones for v0.0.1 are tracked there.
 
 ### HyperEVM ingestion (or any other EVM blockchain)
 
@@ -80,8 +93,8 @@ Summary of the layer:
 
 | Subsystem | Role |
 | :--- | :--- |
-| `services/ingestion/hyperdata-node` | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; replay script (planned). |
-| `services/ingestion/hyperdata-node-sidecar` (planned) | Watches node outputs, publishes file notifications to Kafka. |
+| `services/ingestion/hyperdata-node` | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; snapshot bootstrap tooling. |
+| `services/ingestion/hyperdata-node-sidecar` (planned) | Line tailer: streams appended output lines to per-table Kafka topics + hour-file seals; backup sink. |
 | `services/ingestion/hyperdata-ingestion-flink` | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg). |
 | `services/ingestion/hyperdata-indexer-hyperevm` | HyperEVM event firehose (Envio → Postgres). |
 | `services/ingestion/socket-listeners` (future) | WebSocket feeds for other CEX/DEX venues. |
