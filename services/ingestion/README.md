@@ -143,25 +143,27 @@ See the [indexer spec](hyperdata-indexer-hyperevm/docs/full_indexer_spec.md) for
 
 Execution plan for the ingestion layer, ordered by **dependency, not by component** — the goal is the shortest path to a demo-able end-to-end slice:
 
-> one command (`make slice` / `scripts/local-run.sh`) → include-based compose (`node` + `warehouse` profiles) → replay tap drips files from the **real-data corpus** (S3-derived) → sidecar publishes to Kafka → Flink commits Parquet into Iceberg → query `hypercore.*` tables and see real rows.
+> one command (`make slice` / `scripts/local-run.sh`) → include-based compose (`node` + `warehouse` profiles) → replay tap drips files from the **real-data corpus** (local Jun-10 dump) → sidecar publishes to Kafka → Flink commits Parquet into Iceberg → query `hypercore.*` tables and see real rows.
 
-Decisions already locked (do not re-litigate while executing): Java fat-jar for production jobs (volume + connector maturity; PyFlink only for samples/showcase) · Kafka notifications only, never payloads · replay = same path as live · finalization-only sidecar notifications · Iceberg owns Parquet writing (no bespoke parquet code) · `.gitmodules`-managed repos per service, plain dirs for dev tools · **real data over synthetic** — an S3 copy of actual node outputs already exists and is the primary dev/staging replay source.
+Decisions already locked (do not re-litigate while executing): Java fat-jar for production jobs (volume + connector maturity; PyFlink only for samples/showcase) · Kafka notifications only, never payloads · replay = same path as live · finalization-only sidecar notifications · Iceberg owns Parquet writing (no bespoke parquet code) · `.gitmodules`-managed repos per service, plain dirs for dev tools · **real data over synthetic** — a local dump of actual node outputs (two hours, Jun 10) already exists at `/nvme0n1-disk/data/hl-node-data/` and is the primary dev/staging replay source.
 
 ---
 
-## Phase 0.5 — Real-data inventory (BLOCKS topic & schema design) [next up]
+## Phase 0.5 — Real-data inventory (BLOCKS topic & schema design) [in progress — inventory DONE 2026-09-21]
 
-**Goal:** inspect the S3 copy of actual node outputs and design topics/schemas from **observed reality**, not docs alone.
+**Goal:** inspect actual node outputs and design topics/schemas from **observed reality**, not docs alone.
 
-- [ ] Access check: creds + tooling on the dev VM (`aws` / `s5cmd` / `mc`), bucket name, requester-pays status.
-- [ ] Inventory: directory tree (which tables actually exist), hourly layout vs documented, `periodic_abci_states` cadence in practice, presence of `replica_cmds` / `misc_events`.
-- [ ] Ground-truth schemas: sample records per table — validate the documented L1 shapes (fills, order statuses, raw book diffs, misc events), note drift (missing fields, unexpected ones).
-- [ ] Sizing reality: per-table GB/hour, records/block, file counts/day — replaces the "~100 GB/day" docs estimate; feeds Flink writer sizing (128–512 MB targets) and sidecar checksum cost estimates.
-- [ ] Hour-rollover behavior: how the current hour's file actually grows and finalizes (appends? per-block writes? final rename?) — finalization heuristic in Phase 2 must match observed behavior.
-- [ ] **Topic design decision** (outputs of this phase): single `hyperliquid.node-files` vs per-table topics; partition count & message keys from observed table cardinality; retention estimate.
-- [ ] **Corpus selection**: pick a small contiguous window (e.g. 2–3 hours, ideally spanning a snapshot boundary) to become the dev/staging replay corpus; document its path.
+**We have a local dump of a real node's output: `/nvme0n1-disk/data/hl-node-data/data_stream_with_block_info/` — two consecutive hours (2026-06-10, hours 13–14), all three streaming tables + ten abci snapshots.** (~124 GB; a second May-29 one-hour capture sits alongside at `data_stream_with_block_info.20260531/`.)
 
-**Acceptance:** a written inventory (this README or a linked note) with real schemas, real sizes, real rollover behavior, and the topic design recorded as locked decisions.
+- [x] Access check: **local, not S3** — dump lives at `/nvme0n1-disk/data/hl-node-data/` (344 GB total incl. scratch/derived artifacts; the platform-relevant part is `data_stream_with_block_info/`).
+- [x] Inventory: three streaming tables only — `node_fills_streaming`, `node_order_statuses_streaming`, `node_raw_book_diffs_streaming`, each `hourly/<YYYYMMDD>/<HH>/<one file per hour>`; plus `periodic_abci_states/<date>/<height>.rmp`. **No `replica_cmds` / `misc_events` in the capture** — v0 table set is the three tables + snapshots.
+- [x] Ground-truth schemas: `--batch-by-block` shape confirmed (`{local_time, block_time, block_number, events: [...]}`), one event per line in this capture; fills carry `px/sz/side/dir/closedPnl/hash/oid/crossed/fee/tid/cloid/feeToken/twapId`, order statuses carry full order objects (`oid, limitPx, sz, origSz, orderType, tif, ...`), book diffs carry `raw_book_diff: new{sz} | update{origSz,newSz} | "remove"`.
+- [x] Sizing reality (per hour, Jun 10): **order_statuses ~52 GB/h** (84.5M lines, ~1,500 lines/block!) · book_diffs ~15 GB/h · fills ~0.5 GB/h · snapshots ~1.3 GB each. Block rate **~15.6 blocks/s** (56k blocks/h). Extrapolated: **~1.7 TB/day total, order_statuses alone ~1.2 TB/day** — an order of magnitude above the docs' "~100 GB/day"; sizing for Flink writers, Kafka rates and sidecar checksums starts from *these* numbers.
+- [x] Hour-rollover behavior: one file per table per hour, appended during the hour, finalized at rollover → sidecar finalization = "hour dir no longer current", no per-block files.
+- [ ] **Topic design decision** (from the above): single `hyperliquid.node-files` vs per-table topics; partition count & message keys; retention estimate. Given ~1,500 lines/block on order_statuses, notifications stay tiny (one per finalized file per table per hour — dozens/day), so the notification topic is trivially small either way.
+- [x] **Corpus selection**: the Jun-10 two-hour capture **is** the corpus — complete tree, spans ten snapshot boundaries; path documented here. (Optionally trim to a subset for faster CI.)
+
+**Acceptance:** a written inventory (this section) with real schemas, real sizes, real rollover behavior — done. Remaining: topic design decision recorded as locked.
 
 ---
 
@@ -183,10 +185,10 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 
 **Goal:** a tap that drips **real** node outputs into the watched volume, so everything downstream is built and tested against ground-truth data with no live node and no cloud dependency at run time.
 
-**Corpus** (`corpus/`, plain dir — dev data, gitignored):
+**Corpus** (the Jun-10 two-hour local dump; plain dir — dev data, gitignored):
 
-- [ ] Download the Phase-0.5-selected window from S3 into a local corpus dir (preserving the tree).
-- [ ] Verify corpus integrity (checksums vs S3, record counts per file).
+- [ ] Point the tap at `/nvme0n1-disk/data/hl-node-data/data_stream_with_block_info/` (or copy the selected window into a smaller `corpus/` dir for CI speed).
+- [ ] Verify corpus integrity (record counts per file vs the inventory numbers).
 - [ ] Optionally trim: keep whole hours only, so finalization semantics see clean boundaries.
 
 **Replay tap** (`replay-tap/`, plain dir — dev/staging tool, does not earn a submodule):
@@ -195,7 +197,7 @@ Decisions already locked (do not re-litigate while executing): Java fat-jar for 
 - [ ] Simulates hour rollover by advancing through the corpus's date/hour dirs — the sidecar's finalization logic sees the same file lifecycle the live node produces (per Phase-0.5 observations).
 - [ ] Env-config only in v0 — **HTTP trigger endpoint deferred** (see parking lot).
 - [ ] Compose wiring: `replay-tap` service under `node` profile as the alternative to `hyperdata-node` (either/or via `profiles`, sharing the `node-outputs` volume).
-- [ ] Source flexibility: local corpus dir in v0; the same tap reads from the S3 bucket directly in staging (config switch only).
+- [ ] Source flexibility: local corpus dir in v0; the same tap reads from the dump dir directly, and from an S3/GCS bucket in staging (config switch only).
 
 **CI fixtures** (`fixtures/`, plain dir — demoted from primary to CI/unit-test role):
 
