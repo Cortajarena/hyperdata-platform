@@ -244,6 +244,7 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 
 - [ ] **Tailer, not watcher**: poll growth (~250 ms default) on current-hour files per table; read appended bytes; track line boundaries (partial trailing line held back until newline arrives).
 - [ ] **Data plane**: one Kafka message per new line → per-table topic, keyed `coin`. Values = raw node JSON lines, unchanged.
+- [ ] **Stable line identity (idempotency contract)**: every message carries a stable line id — `table|block_number|seq_in_block` (preferred; semantic, survives re-publication) or the line's byte offset — as a Kafka header. The append-only parse job absorbs at-least-once duplicates, but **future stateful consumers cannot**: replaying an `update`/`remove` diff is not idempotent, so the line id is their dedup key. Cheap now, impossible to retrofit once topics are live.
 - [ ] **Seal plane**: on hour rollover, publish `{table, path, date, hour, block_range, size, sha256, finalized_at}` → `hyperliquid.node-files`, keyed `table|date|hour`.
 - [ ] **Offset state**: per-file byte offsets persisted (after Kafka ack) to a local state store; crash → resume from offset → at-least-once (downstream exactly-once absorbs duplicates).
 - [ ] **Startup reconciliation**: full scan of watched tree, resume from persisted offsets — start-order independent.
@@ -307,7 +308,8 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 
 **Goal:** the showcase job — proves the stateful pre-modeling tier and de-risks the future low-latency path.
 
-- [ ] Keyed state by `(coin, oid)`: apply `raw_book_diffs` in arrival order, maintain per-level book state in Flink state.
+- [ ] Keyed state by `(coin, oid)`: apply `raw_book_diffs` in arrival order, maintain per-level book state in Flink state. `keyBy(coin)` distributes per-book processing — one subtask owns whole books.
+- [ ] **Dedup on the stable line id** (Phase 2): the sidecar is at-least-once; diff replays are not idempotent, so the keeper must drop lines already applied. This is the consumer that makes the line-id contract load-bearing (see [Appendix](#appendix-stateful-l2-book-poc-future)).
 - [ ] **Seal the book:** on snapshot-file notification (Phase 2's `periodic_abci_states` events), re-baseline keyed state against ground truth, emit a `sealed_checkpoint` record (book hash, level counts, order counts, drift metrics).
 - [ ] **Check correctness:** compare incrementally-built state vs. re-baselined state; emit drift telemetry (this is the "free correctness oracle" from the design, live).
 - [ ] Language: PyFlink acceptable here (samples/showcase tier, iteration speed over throughput) — production core stays Java.
@@ -335,7 +337,7 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 ## Dependency map
 
 ```
-Phase 0.5 (S3 inventory) ──► topic design locked
+Phase 0.5 (real-data inventory) ──► topic design locked
         │
         ├─► Phase 0 (kafka smoke, parallel) ─┬─► Phase 1 (corpus + tap) ─► Phase 2 (sidecar) ─► Phase 4 (e2e + make slice) ─► Phase 5 (stateful)
         │                                    │                        │
@@ -343,3 +345,35 @@ Phase 0.5 (S3 inventory) ──► topic design locked
 ```
 
 Phase 3 needs Phase 1's corpus but not the sidecar — it proceeds **in parallel** with Phase 2. Phase 0.5 and Phase 0 are both quick and independent of each other; the first real engineering decisions surface in Phases 2 and 3.
+
+---
+
+# Appendix: stateful L2 book POC (future)
+
+Forward reference for the first non-trivial **stateful** consumer — an L2 order-book keeper — for after v1, which is deliberately stateless (parse → Parquet/Iceberg only). Tracked as Phase 5 above.
+
+**Why the architecture already supports it:**
+
+- `hyperliquid.book-diffs` is keyed by `coin` → all lines for an instrument land in one partition, **in order**. Sequential state application, for free.
+- Consumers are independent Kafka consumer groups: the book keeper runs beside the Iceberg parse job with its own lag and checkpoints. No coupling — a slow keeper never stalls the archive.
+- `periodic_abci_states` snapshots provide ground truth to re-baseline and verify against.
+
+**Shape of the POC:**
+
+- **Source:** `hyperliquid.book-diffs` — L4 per-order deltas (`new{sz}` | `update{origSz,newSz}` | `remove`).
+- **Keying:** `keyBy(coin)` → per-book distributed processing; each parallel subtask owns whole books.
+- **State:** `MapState` of L2 levels `(coin, px) -> {sz, oids}` aggregated from L4 orders, plus per-`oid` bookkeeping so `update`/`remove` apply correctly.
+- **Output:** derived streams (L2 snapshots, top-of-book, liquidity metrics) to their own topics and/or a serving store (ClickHouse/Redis) — independent of the raw archive.
+
+**The two properties that make it more than a toy:**
+
+1. **Seal & check (drift correction).** On each snapshot-seal, re-baseline computed state from the snapshot-derived book and diff against incrementally-built state → emit drift telemetry. Self-healing and self-verifying.
+2. **Cold start without Kafka history.** Kafka retention bounds catch-up; the keeper bootstraps from the snapshot at height `H` and resumes from the offset for `H`. Snapshots + ordered diffs are the system of record for state — not Kafka.
+
+**Constraints:**
+
+- **Line idempotency** — the sidecar is at-least-once and `update`/`remove` are not idempotent, so the keeper must dedup on the stable line id (Phase 2). Harmless for the append-only parse job; load-bearing here.
+- **State size** — L4 for all coins is heavy; L2 is far smaller. RocksDB backend + checkpointing to object storage; parallelize by coin activity.
+- **Keying** — `coin` covers per-instrument books; any future cross-asset state (portfolio, index, cross-venue) needs a different key or a co-partitioned join.
+
+**Sequencing:** after v1 (stateless parse → Iceberg). Phase 5's acceptance is a demo run showing book state building live, a snapshot arrival, and a `sealed_checkpoint` with zero (or reported) drift.
