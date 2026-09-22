@@ -16,7 +16,7 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
-      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,LOCAL://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,LOCAL://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,LOCAL://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,LOCAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
@@ -25,6 +25,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS: "true"     # dev convenience; disable in prod
+      KAFKA_LOG_DIRS: /var/lib/kafka/data  # persist KRaft metadata + topic data (image default /tmp/kafka-logs is ephemeral)
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -33,18 +34,18 @@ services:
       timeout: 10s
       retries: 10
 
-  kafka-init:                               # one-shot topic bootstrap
+  kafka-init:                               # idempotent topic bootstrap (kafka/topics.yaml)
     image: apache/kafka:3.9.0
     depends_on:
       kafka:
         condition: service_healthy
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - |
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists \
-          --topic hyperliquid.node-files \
-          --partitions 6 \
-          --replication-factor 1
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      TOPICS_FILE: /topics.yaml
+    volumes:
+      - ./kafka/init-topics.sh:/init-topics.sh:ro
+      - ./kafka/topics.yaml:/topics.yaml:ro
+    entrypoint: ["/bin/bash", "/init-topics.sh"]
 
   # --- Ingestion workloads ---
   hyperdata-node:

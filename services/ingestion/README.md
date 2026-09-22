@@ -69,7 +69,7 @@ docker compose --profile node up       # + hyperdata-node (or replay tap) + side
 docker compose --profile warehouse up  # + iceberg-catalog (Nessie) + minio (S3-compatible dev storage)
 ```
 
-Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (creates the four locked topics), `hyperdata-node` + `hyperdata-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
+Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (applies `kafka/topics.yaml`), `hyperdata-node` + `hyperdata-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
 
 **Commit strategy — the one duality of the system:**
 
@@ -174,6 +174,8 @@ Decisions already locked (do not re-litiate while executing): Java fat-jar for p
 
 ## Kafka topic design (locked)
 
+> **Source of truth:** [`kafka/topics.yaml`](kafka/topics.yaml) — machine-readable topic contract, applied idempotently by [`kafka/init-topics.sh`](kafka/init-topics.sh) through the `kafka-init` compose service. The same contract targets K8s later (rendered to Strimzi `KafkaTopic` CRs, or the script as a one-shot `Job`). The table below mirrors it; if they disagree, the YAML wins.
+
 The sidecar **tails appended lines** — Kafka is a **data plane** for the three streams, plus a **seal plane** for durability. Per-table topics because processing diverges: fills → trade analytics; book diffs → (future) stateful book reconstruction; order statuses → lifecycle analytics. Different consumers, different state, 100× rate differences.
 
 | Topic | Plane | Contents | Key | Rate (Jun-10 measured) | Partitions | Retention |
@@ -195,18 +197,22 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 
 ---
 
-## Phase 0 — Kafka smoke test [parallel with 0.5]
+## Phase 0 — Kafka smoke test [DONE 2026-09-22]
 
 **Goal:** prove the compose stack works before anything is built on it — now against the **locked four-topic design**.
 
-- [ ] `docker compose up` — kafka (KRaft) + kafka-init come up healthy; `kafka-init` exits 0.
-- [ ] Update `kafka-init` to create the locked topics: `hyperliquid.book-diffs` (6p), `hyperliquid.order-statuses` (6p), `hyperliquid.fills` (3p), `hyperliquid.node-files` (3p, seals). (`node-snapshots` parked.)
-- [ ] Verify topics: `kafka-topics.sh --bootstrap-server kafka:29092 --describe` each — partitions per the table above.
-- [ ] Console round-trip in-network (`kafka:29092`): produce one sample line to `hyperliquid.book-diffs`, consume it back.
-- [ ] Console round-trip on the host listener (`localhost:9092`).
-- [ ] Confirm topic auto-config: `KAFKA_AUTO_CREATE_TOPICS=true` is dev-only; note for prod flip.
+- [x] `docker compose up` — kafka (KRaft) + kafka-init come up healthy; `kafka-init` exits 0.
+- [x] Topic contract in [`kafka/topics.yaml`](kafka/topics.yaml); applied by [`kafka/init-topics.sh`](kafka/init-topics.sh) (idempotent, awk-parsed — image ships no python/yq).
+- [x] Create the four topics: `hyperliquid.book-diffs` (6p), `hyperliquid.order-statuses` (6p), `hyperliquid.fills` (3p), `hyperliquid.node-files` (3p, seals). (`node-snapshots` parked.)
+- [x] Verify topics + partitions + `retention.ms=259200000` via `--describe`.
+- [x] Console round-trip in-network (`kafka:29092`) and on the host listener (`localhost:9092`) — both pass.
+- [x] Idempotency: re-running `kafka-init` is a no-op; topics survive broker recreate.
 
-**Acceptance:** messages produced inside the compose network are consumable both in-network and from the host, on all four topics.
+**Two bugs found and fixed during the smoke test (worth remembering):**
+1. **Host listener unreachable** — `LOCAL://localhost:9092` *listens* on the container's loopback only, so the published port (DNAT to the container IP) couldn't reach it. Fix: listen on `0.0.0.0:9092`, advertise `localhost:9092`.
+2. **Topics vanished on recreate** — the image's default data dir is `/tmp/kafka-logs` (container layer), not the mounted `/var/lib/kafka/data`. Fix: `KAFKA_LOG_DIRS=/var/lib/kafka/data`.
+
+**Acceptance:** met — messages round-trip on all four topics both in-network and from the host; topic data persists across broker restarts.
 
 ---
 

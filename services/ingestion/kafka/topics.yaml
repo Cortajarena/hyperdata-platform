@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Kafka topics — SINGLE SOURCE OF TRUTH for the ingestion layer.
+#
+# Consumers of this file:
+#   - local:  the `kafka-init` compose service parses it (awk) and creates topics
+#   - K8s:    rendered to Strimzi KafkaTopic CRs (future), or applied by the
+#             same parser as a one-shot Job
+#   - docs:   services/ingestion/README.md "Kafka topic design" table mirrors it
+#
+# Schema (kept flat on purpose — parsed by awk, no python/yq in the Kafka image):
+#   defaults: replication, retention.ms
+#   topics:   list of {name, partitions, plane, key, [replication], [retention.ms]}
+# ---------------------------------------------------------------------------
+
+defaults:
+  replication: 1                 # dev; K8s overrides to 3
+  retention.ms: 259200000        # 72h safety net — Iceberg is the archive
+
+topics:
+  - name: hyperliquid.book-diffs
+    plane: data
+    key: coin
+    partitions: 6
+
+  - name: hyperliquid.order-statuses
+    plane: data
+    key: coin
+    partitions: 6
+
+  - name: hyperliquid.fills
+    plane: data
+    key: coin
+    partitions: 3
+
+  - name: hyperliquid.node-files
+    plane: seal
+    key: table|date|hour
+    partitions: 3
+
+  # PARKED — snapshot design pending (see README: hyperliquid.node-snapshots)
+  # - name: hyperliquid.node-snapshots
+  #   plane: seal
+  #   key: height
+  #   partitions: 3
