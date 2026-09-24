@@ -1,0 +1,10 @@
+<!--
+  ClickHouse user overrides (users.d) — merged over image defaults.
+  Server settings (not users) would go in platform/clickhouse/config-server/
+  mounted over /etc/clickhouse-server/config.d — kept separate so the
+  serving user policy never tangles with engine tuning.
+  TODO(serving): strict read-only `analytics` user for the BI tier
+  (passwords via env, never committed).
+-->
+<clickhouse>
+</clickhouse>

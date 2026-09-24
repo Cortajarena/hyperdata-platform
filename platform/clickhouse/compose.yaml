@@ -1,0 +1,36 @@
+# ClickHouse — analytical serving store (platform system, like kafka).
+# Defined once here; consumers include this fragment rather than redeclaring
+# it. Data/DDL ownership rule: table/view logic lives in jobs/ (jobs/dbt via
+# dbt-clickhouse, or the jobs/flink consumer that derives it) — never in this
+# directory. See README.md in this dir for the quickstart + roadmap.
+#
+# Profile-gated (`serving`): unlike Kafka, consumers are Phase-5/BI only; the
+# services slice may `include:` this fragment once a consumer exists.
+# TODO(pin): float tag — pin an LTS tag before first real usage.
+
+name: hyperdata-platform
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    profiles: [serving]
+    environment:
+      # dev-only credentials (image hardens the default user away otherwise);
+      # rotate/replace during the serving tier's real rollout
+      CLICKHOUSE_USER: hyperdata
+      CLICKHOUSE_PASSWORD: hyperdata-dev
+    ports:
+      - "8123:8123"     # HTTP interface (single-node quickstart, no client needed)
+      - "9100:9000"     # native protocol (in-network stays clickhouse:9000;
+                        # host 9000 is taken by minio's S3 API)
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./config/users.xml:/etc/clickhouse-server/users.d/hyperdata.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  clickhouse-data:
