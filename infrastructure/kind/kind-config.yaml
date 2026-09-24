@@ -1,0 +1,21 @@
+# Minimal local Kubernetes dev cluster (KinD) for HyperData.
+# Prereqs: docker + kind + kubectl — see README.md in this directory.
+#
+# Deliberately minimal (single node, no workers, no port mappings): the goal
+# is a node that can schedule system Helm charts/manifests — Strimzi + Kafka
+# broker, Iceberg catalog, Airflow — before any tuning is warranted.
+# NOTE: dev-soon candidates, commented until needed.
+#
+# kind: Cluster
+# apiVersion: kind.x-k8s.io/v1alpha4
+# name: hyperdata
+# nodes:
+#   - role: control-plane
+#     extraPortMappings:
+#       - hostPort: 80
+#         containerPort: 80        # ingress-nginx (serving layer later)
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: hyperdata
+nodes:
+  - role: control-plane

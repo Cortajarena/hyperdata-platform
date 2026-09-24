@@ -1,4 +1,4 @@
-.PHONY: up down build logs lint test dbt spark flink
+.PHONY: up down build logs lint test dbt spark flink kind-up kind-down
 
 COMPOSE ?= docker compose
 
@@ -28,3 +28,9 @@ spark:
 
 flink:
 	$(COMPOSE) exec flink-jobmanager flink run /opt/flink/usrlib/
+
+kind-up:
+	bash infrastructure/kind/up.sh
+
+kind-down:
+	kind delete cluster --name hyperdata
