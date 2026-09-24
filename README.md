@@ -19,7 +19,7 @@ Well, HyperLiquid's dual chain architecture is the perfect example to build a fu
 
 ## Status [WIP]
 
-This is an initial draft. We are currently working on the ingestion pipelines **[services/ingestion/README.md](services/ingestion/README.md)**, with ETA 1-2 weeks to support full ingestion of HyperCore into a central Iceberg catalog. Next steps will be adding EVM near real time ingestion, orchestration and backfills both for HyperCore and HyperEVM, and basic **dbt** modeling to start with.
+This is an initial draft. We are currently working on the ingestion pipelines **[docs/ingestion.md](docs/ingestion.md)**, with ETA 1-2 weeks to support full ingestion of HyperCore into a central Iceberg catalog. Next steps will be adding EVM near real time ingestion, orchestration and backfills both for HyperCore and HyperEVM, and basic **dbt** modeling to start with.
 
 Then we will start building IaC and kubernetes deployments.
 
@@ -60,10 +60,11 @@ You can check the milestones in each section for version **v0.0.1**.
 
 Local stack conventions:
 
-- **Per-layer compose files** (`services/ingestion/compose.yaml`, ...), aggregated by the root `docker-compose.yml` via `include:`. Each layer stack is also runnable standalone: `cd services/ingestion && docker compose up` brings up just that slice.
+- **Per-slice compose files** (`platform/kafka/compose.yaml` cluster systems, `services/compose.yaml` services slice), aggregated by the root `docker-compose.yml` via `include:`. Each slice is also runnable standalone: `cd services && docker compose up` brings up just that slice.
+- **Top-level axes:** `services/` (long-running deployables) · `jobs/` (compute workloads by engine — placement rule in [`jobs/README.md`](jobs/README.md)) · `platform/` (cluster systems: kafka, flink-cluster, airflow, prefect) · `docs/` (cross-dir execution plans).
 - **Project identity:** all compose files set `name: hyperdata-platform`, so included and standalone runs share one project/network identity.
 - **No `version:` key** in compose files (obsolete in Compose ≥ 2.20).
-- **Profiles gate workloads** that need external inputs (e.g. `--profile node` for the live node + sidecar, `--profile warehouse` for catalog + MinIO); shared infra (Kafka) is always-on within its layer.
+- **Profiles gate workloads** that need external inputs (e.g. `--profile node` for the live node + sidecar, `--profile warehouse` for catalog + MinIO); shared systems (Kafka, `platform/kafka/compose.yaml`) are always-on and included by the stack that uses them.
 
 Usage (from repo root):
 
@@ -71,7 +72,7 @@ Usage (from repo root):
 docker compose up                                          # platform + shared infra (kafka included)
 docker compose --profile node up                           # + hyperdata-node & sidecar
 docker compose --profile node --profile warehouse up       # + Iceberg catalog & MinIO
-cd services/ingestion && docker compose up                 # standalone: just the ingestion slice
+cd services && docker compose up                 # standalone: just the services slice
 ```
 
 ## Ingestion layer: distributed (batch) ingestion & stateful streaming
@@ -83,23 +84,23 @@ Milestones:
 
 ### Hypercore ingestion (or any other Limit Order Book or event feeds)
 
-The full ingestion design — live node, replay-as-tap (progressive append), sidecar line-tailing to per-table Kafka topics, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[services/ingestion/README.md](services/ingestion/README.md)**. Milestones for v0.0.1 are tracked there.
+The full ingestion design — live node, replay-as-tap (progressive append), sidecar line-tailing to per-table Kafka topics, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[docs/ingestion.md](docs/ingestion.md)**. Milestones for v0.0.1 are tracked there.
 
 ### HyperEVM ingestion (or any other EVM blockchain)
 
-HyperEVM exposes standard Ethereum JSON-RPC, so raw ingestion reuses **[ethereum-etl](https://github.com/blockchain-etl/ethereum-etl)** — the generic EVM ETL toolchain behind BigQuery's `crypto_ethereum` dataset — pointed at a local HyperLiquid node (`--serve-eth-rpc`) or any RPC provider. One toolchain covers both temporal modes with identical output: **backfill** (batch block-range extraction) and **real-time** (head-following streaming), both materializing the same raw Parquet/Iceberg tables (`blocks`, `transactions`, `logs`, `traces`, `token_transfers`, ...). The [Envio indexer](services/ingestion/hyperdata-indexer-hyperevm) complements this as the decoded-event firehose (wildcard `Transfer`/`Approval` → Postgres), while ethereum-etl owns the generic raw EVM tables.
+HyperEVM exposes standard Ethereum JSON-RPC, so raw ingestion reuses **[ethereum-etl](https://github.com/blockchain-etl/ethereum-etl)** — the generic EVM ETL toolchain behind BigQuery's `crypto_ethereum` dataset — pointed at a local HyperLiquid node (`--serve-eth-rpc`) or any RPC provider. One toolchain covers both temporal modes with identical output: **backfill** (batch block-range extraction) and **real-time** (head-following streaming), both materializing the same raw Parquet/Iceberg tables (`blocks`, `transactions`, `logs`, `traces`, `token_transfers`, ...). The [Envio indexer](services/hyperdata-indexer-hyperevm) complements this as the decoded-event firehose (wildcard `Transfer`/`Approval` → Postgres), while ethereum-etl owns the generic raw EVM tables.
 
 Summary of the layer:
 
 | Subsystem | Role |
 | :--- | :--- |
-| `services/ingestion/hyperdata-node` | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; snapshot bootstrap tooling. |
-| `services/ingestion/hyperdata-node-sidecar` (planned) | Line tailer: streams appended output lines to per-table Kafka topics + hour-file seals; backup sink. |
-| `services/ingestion/hyperdata-ingestion-flink` | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg). |
-| `services/ingestion/hyperdata-indexer-hyperevm` | HyperEVM event firehose (Envio → Postgres). |
-| `services/ingestion/socket-listeners` (future) | WebSocket feeds for other CEX/DEX venues. |
+| `services/hyperdata-node` | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; snapshot bootstrap tooling. |
+| `services/hyperdata-node-sidecar` (planned) | Line tailer: streams appended output lines to per-table Kafka topics + hour-file seals; backup sink. |
+| `jobs/flink` | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg); cluster in `platform/flink-cluster`. |
+| `services/hyperdata-indexer-hyperevm` | HyperEVM event firehose (Envio → Postgres). |
+| `services/socket-listeners` (future) | WebSocket feeds for other CEX/DEX venues. |
 
-For HyperEVM raw table extraction (`blocks`, `transactions`, `logs`, `traces`, `contracts`, `tokens`, `token_transfers`, `balances`), see the [indexer spec](services/ingestion/hyperdata-indexer-hyperevm/docs/full_indexer_spec.md).
+For HyperEVM raw table extraction (`blocks`, `transactions`, `logs`, `traces`, `contracts`, `tokens`, `token_transfers`, `balances`), see the [indexer spec](services/hyperdata-indexer-hyperevm/docs/full_indexer_spec.md).
 
 ## Data warehousing: connectors & supported DBs
 
@@ -110,7 +111,7 @@ TODO:
 
 ## Orchestration, data modeling and transformation layer
 
-Modeling, Iceberg maintenance and custom distributed jobs live in **[services/transformation/README.md](services/transformation/README.md)** (dbt, Spark). Milestones for v0.0.1 are tracked there. Orchestration itself (schedules, dependencies, backfills of tasks) is owned by `platform/airflow`.
+Modeling, Iceberg maintenance and custom distributed jobs live in **[docs/transformation.md](docs/transformation.md)** (dbt, Spark). Milestones for v0.0.1 are tracked there. Orchestration itself (schedules, dependencies, backfills of tasks) is owned by `platform/airflow`.
 
 ### Machine learning, MLOps and custom distributed jobs
 

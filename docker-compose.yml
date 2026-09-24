@@ -1,13 +1,17 @@
-# Thin aggregator: platform-level services + per-layer stacks.
-# Layer stacks are self-contained and also runnable standalone:
-#   cd services/ingestion && docker compose up
+# Root stack aggregator: platform systems + included slices.
+# Include: `- platform/kafka/compose.yaml` — cluster systems (Kafka, always-on)
+#          `- services/compose.yaml`      — deployable services slice
+# Platform workloads (postgres, airflow, flink cluster, spark master) are
+# declared directly here, below. Slices are also runnable standalone:
+#   cd services && docker compose up
 # Conventions: no `version:` key (Compose ≥2.20), project name fixed
 # so included and standalone runs share the same identity. See README.
 
 name: hyperdata-platform
 
 include:
-  - services/ingestion/compose.yaml
+  - platform/kafka/compose.yaml
+  - services/compose.yaml
 
 x-airflow-common: &airflow-common
   build:
@@ -17,7 +21,7 @@ x-airflow-common: &airflow-common
     - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
   volumes:
     - ./platform/airflow/dags:/opt/airflow/dags
-    - ./services/transformation/dbt:/opt/airflow/dbt
+    - ./jobs/dbt:/opt/airflow/dbt
     - /var/run/docker.sock:/var/run/docker.sock
   depends_on:
     postgres:
@@ -68,10 +72,10 @@ services:
   # --- Batch Execution Processing ---
   spark-master:
     build:
-      context: ./services/transformation/spark
+      context: ./jobs/spark
     command: bin/spark-class org.apache.spark.deploy.master.Master
     ports:
       - "7077:7077"
       - "9090:8080"
     volumes:
-      - ./services/transformation/spark:/opt/spark/workloads
+      - ./jobs/spark:/opt/spark/workloads

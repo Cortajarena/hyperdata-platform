@@ -1,0 +1,54 @@
+# Kafka (KRaft mode — no ZooKeeper) — cluster messaging system, owned by
+# platform/ (a system, not a layer service). Defined once here; consumers
+# include this fragment rather than redeclaring it:
+#   root stack: `- platform/kafka/compose.yaml`
+#   services slice: `include: ../platform/kafka/compose.yaml`
+#
+# Topic contract: topic definitions in kafka/topics.yaml, applied idempotently
+# by `kafka-init`. Design + sizing (Jun-10 measurements: ~20 MB/s sustained,
+# ~1.6 TB/day raw): docs/ingestion.md, "Kafka topic design".
+
+name: hyperdata-platform
+
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    ports:
+      - "9092:9092"                       # host tools; in-network is kafka:29092
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,LOCAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,LOCAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,LOCAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS: "true"     # dev convenience; disable in prod
+      KAFKA_LOG_DIRS: /var/lib/kafka/data  # persist KRaft metadata + topic data (image default /tmp/kafka-logs is ephemeral)
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  kafka-init:                             # idempotent topic bootstrap (platform/kafka/topics.yaml)
+    image: apache/kafka:3.9.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      TOPICS_FILE: /topics.yaml
+    volumes:
+      - ./init-topics.sh:/init-topics.sh:ro
+      - ./topics.yaml:/topics.yaml:ro
+    entrypoint: ["/bin/bash", "/init-topics.sh"]
+
+volumes:
+  kafka-data:

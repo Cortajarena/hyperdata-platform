@@ -5,7 +5,7 @@
 #   - local:  the `kafka-init` compose service parses it (awk) and creates topics
 #   - K8s:    rendered to Strimzi KafkaTopic CRs (future), or applied by the
 #             same parser as a one-shot Job
-#   - docs:   services/ingestion/README.md "Kafka topic design" table mirrors it
+#   - docs:   docs/ingestion.md "Kafka topic design" table mirrors it
 #
 # Schema (kept flat on purpose — parsed by awk, no python/yq in the Kafka image):
 #   defaults: replication, retention.ms

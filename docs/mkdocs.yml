@@ -8,3 +8,5 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Getting Started: getting-started.md
+  - Ingestion: ingestion.md
+  - Transformation: transformation.md

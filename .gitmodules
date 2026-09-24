@@ -1,12 +1,12 @@
-[submodule "services/ingestion/hyperdata-node"]
-	path = services/ingestion/hyperdata-node
+[submodule "hyperdata-node"]
+	path = services/hyperdata-node
 	url = git@github.com:Cortajarena/hyperdata-node.git
-[submodule "services/ingestion/hyperdata-indexer-hyperevm"]
-	path = services/ingestion/hyperdata-indexer-hyperevm
+[submodule "hyperdata-indexer-hyperevm"]
+	path = services/hyperdata-indexer-hyperevm
 	url = git@github.com:Cortajarena/hyperdata-indexer-hyperevm.git
-[submodule "services/ingestion/hyperdata-node-sidecar"]
-	path = services/ingestion/hyperdata-node-sidecar
+[submodule "hyperdata-node-sidecar"]
+	path = services/hyperdata-node-sidecar
 	url = git@github.com:Cortajarena/hyperdata-node-sidecar.git
-[submodule "services/ingestion/hyperdata-ingestion-flink"]
-	path = services/ingestion/hyperdata-ingestion-flink
+[submodule "hyperdata-ingestion-flink"]
+	path = jobs/flink
 	url = git@github.com:Cortajarena/hyperdata-ingestion-flink.git

@@ -16,7 +16,7 @@ hyperdata-node-sidecar (line tailer)
    │     hyperliquid.book-diffs / .order-statuses / .fills   key: coin
    └─► seal topic (per finalized hour-file): hyperliquid.node-files
    ▼
-hyperdata-ingestion-flink/parse-node-outputs ──► Parquet + Iceberg (hypercore.* raw tables)
+jobs/flink/parse-node-outputs ──► Parquet + Iceberg (hypercore.* raw tables)
 ```
 
 ---
@@ -59,9 +59,9 @@ HyperCore (and LOB / exchange chains in general) emits **stateful financial data
 - **Backfill = same job, different source.** Flink's bounded mode (`--source files`) runs the identical parse core. At TB-scale, backfill files are enumerated (e.g. `s5cmd`) and handed to the bounded job directly — Kafka never carries bulk reprocessing.
 - **Iceberg, not raw Parquet piles.** Checkpoint-aligned commits give atomicity, exactly-once semantics, schema evolution and hidden partitioning. Tables: `hypercore.{fills, order_statuses, raw_book_diffs, snapshots}`.
 
-**Infra placement rule:** infra is defined by the first layer that needs it, and promoted to `platform/` when a second layer consumes it. Kafka therefore lives in this layer's `compose.yaml` for now; when transformation/serving start consuming its topics directly, its definition moves to the platform stack unchanged.
+**Infra placement rule (updated 2026-09-24):** *cluster systems* (Kafka, PostgreSQL, the Flink cluster — always-on infra no layer owns) are defined once under `platform/` and included by the stacks that consume them. Layer-scoped artifacts stay in `services/` (deployables) and `jobs/` (compute workloads). Kafka lives in [`platform/kafka/`](../platform/kafka/) (KRaft broker + topic bootstrap, compose fragment included by the services slice); cross-layer execution plans live in `docs/`.
 
-**Running the layer** — this directory is a standalone compose project (also included by the root stack):
+**Running the slice** — the services slice is standalone (`cd services && docker compose up`) and also included by the root stack; Kafka comes from the `platform/kafka` include, workloads are profile-gated:
 
 ```bash
 docker compose up                      # kafka (KRaft) + topic bootstrap — the always-on slice
@@ -69,7 +69,7 @@ docker compose --profile node up       # + hyperdata-node (or replay tap) + side
 docker compose --profile warehouse up  # + iceberg-catalog (Nessie) + minio (S3-compatible dev storage)
 ```
 
-Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`), `kafka-init` (applies `kafka/topics.yaml`), `hyperdata-node` + `hyperdata-node-sidecar` (profile `node`), `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
+Services: `kafka` (in-network `kafka:29092`, host tools `localhost:9092`) + `kafka-init` — defined once in [`platform/kafka/`](../platform/kafka/), included here; `hyperdata-node` + `hyperdata-node-sidecar` (profile `node`); `iceberg-catalog` + `minio` (profile `warehouse`). Data lands on shared volumes `node-outputs`, `warehouse-data`.
 
 **Commit strategy — the one duality of the system:**
 
@@ -102,10 +102,10 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 
 | Component | Home | Engine |
 | :--- | :--- | :--- |
-| Replay tap (progressive append) | `ingestion/replay-tap/` (planned) | Python |
-| Sidecar (line tailer → Kafka) | `ingestion/hyperdata-node-sidecar` | Python |
-| Parse → Parquet → Iceberg job | `ingestion/hyperdata-ingestion-flink/parse-node-outputs` | Flink (Java fat-jar) |
-| Iceberg maintenance (compaction, snapshot expiry) | `../transformation/spark` | Spark / Trino, Airflow-scheduled |
+| Replay tap (progressive append) | `services/replay-tap/` (planned) | Python |
+| Sidecar (line tailer → Kafka) | `services/hyperdata-node-sidecar` | Python |
+| Parse → Parquet → Iceberg job | `jobs/flink/parse-node-outputs` | Flink (Java fat-jar) |
+| Iceberg maintenance (compaction, snapshot expiry) | `jobs/spark` | Spark / Trino, Airflow-scheduled |
 
 **Milestones (v0.0.1):**
 
@@ -126,9 +126,9 @@ HyperCore gets the bespoke deltas+snapshots pipeline above; HyperEVM is a standa
 - **Source**: local `hyperdata-node` with `--serve-eth-rpc`, or any RPC provider (Dwellir, QuickNode, ...).
 - **Backfill**: batch extraction over block ranges (`ethereumetl stream` / `extract`), landing the standard raw tables — `blocks`, `transactions`, `logs`, `traces`, `contracts`, `tokens`, `token_transfers`, `balances` — as Parquet/Iceberg, mirroring the BigQuery `crypto_ethereum` schema.
 - **Real-time**: the same toolchain in head-following mode (`ethereumetl stream --start-block <head>`), writing identical tables — same commit duality as HyperCore: batch is range-aligned, live is time/size-aligned.
-- **Division of labor with the Envio indexer**: ethereum-etl owns **generic raw EVM tables** (schema known upfront, all chains); [`hyperdata-indexer-hyperevm`](hyperdata-indexer-hyperevm/) owns **decoded events** (wildcard `Transfer`/`Approval` → Postgres via Envio HyperIndex). Raw first, decode later — the same principle as the HyperCore pipeline.
+- **Division of labor with the Envio indexer**: ethereum-etl owns **generic raw EVM tables** (schema known upfront, all chains); [`hyperdata-indexer-hyperevm`](../services/hyperdata-indexer-hyperevm/) owns **decoded events** (wildcard `Transfer`/`Approval` → Postgres via Envio HyperIndex). Raw first, decode later — the same principle as the HyperCore pipeline.
 
-See the [indexer spec](hyperdata-indexer-hyperevm/docs/full_indexer_spec.md) for the phased raw-table design (Phase 1 firehose → Phase 2 decoded via dbt → Phase 3 traces/balances).
+See the [indexer spec](../services/hyperdata-indexer-hyperevm/docs/full_indexer_spec.md) for the phased raw-table design (Phase 1 firehose → Phase 2 decoded via dbt → Phase 3 traces/balances).
 
 ---
 
@@ -136,9 +136,9 @@ See the [indexer spec](hyperdata-indexer-hyperevm/docs/full_indexer_spec.md) for
 
 | Service | What it does |
 | :--- | :--- |
-| [`hyperdata-node`](hyperdata-node/) | HyperLiquid node (hl-visor) emitting raw output files + periodic full-state snapshots; replay script (planned). |
-| [`hyperdata-indexer-hyperevm`](hyperdata-indexer-hyperevm/) | Envio HyperIndex event firehose for HyperEVM (chain 999) → Postgres (decoded events); raw EVM tables via ethereum-etl — see above. |
-| `hyperdata-ingestion-flink/` | Ingestion-stage Flink jobs (`parse-node-outputs`: JSONL → Parquet → Iceberg). |
+| [`hyperdata-node`](../services/hyperdata-node/) | HyperLiquid node (hl-visor) emitting raw output files + periodic full-state snapshots; replay script (planned). |
+| [`hyperdata-indexer-hyperevm`](../services/hyperdata-indexer-hyperevm/) | Envio HyperIndex event firehose for HyperEVM (chain 999) → Postgres (decoded events); raw EVM tables via ethereum-etl — see above. |
+| `jobs/flink/` | Ingestion-stage Flink jobs (`parse-node-outputs`: JSONL → Parquet → Iceberg); cluster lives in `platform/flink-cluster`. |
 | `hyperdata-node-sidecar` (planned) | File watcher → Kafka notifications. |
 | `socket-listeners` (future) | WebSocket feeds from other CEX/DEX venues. |
 
@@ -174,7 +174,7 @@ Decisions already locked (do not re-litiate while executing): Java fat-jar for p
 
 ## Kafka topic design (locked)
 
-> **Source of truth:** [`kafka/topics.yaml`](kafka/topics.yaml) — machine-readable topic contract, applied idempotently by [`kafka/init-topics.sh`](kafka/init-topics.sh) through the `kafka-init` compose service. The same contract targets K8s later (rendered to Strimzi `KafkaTopic` CRs, or the script as a one-shot `Job`). The table below mirrors it; if they disagree, the YAML wins.
+> **Source of truth:** [`platform/kafka/topics.yaml`](../platform/kafka/topics.yaml) — machine-readable topic contract, applied idempotently by [`platform/kafka/init-topics.sh`](../platform/kafka/init-topics.sh) through the `kafka-init` compose service (fragment in `platform/kafka/compose.yaml`). The same contract targets K8s later (rendered to Strimzi `KafkaTopic` CRs, or the script as a one-shot `Job`). The table below mirrors it; if they disagree, the YAML wins.
 
 The sidecar **tails appended lines** — Kafka is a **data plane** for the three streams, plus a **seal plane** for durability. Per-table topics because processing diverges: fills → trade analytics; book diffs → (future) stateful book reconstruction; order statuses → lifecycle analytics. Different consumers, different state, 100× rate differences.
 
@@ -202,7 +202,7 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 **Goal:** prove the compose stack works before anything is built on it — now against the **locked four-topic design**.
 
 - [x] `docker compose up` — kafka (KRaft) + kafka-init come up healthy; `kafka-init` exits 0.
-- [x] Topic contract in [`kafka/topics.yaml`](kafka/topics.yaml); applied by [`kafka/init-topics.sh`](kafka/init-topics.sh) (idempotent, awk-parsed — image ships no python/yq).
+- [x] Topic contract in [`platform/kafka/topics.yaml`](../platform/kafka/topics.yaml); applied by [`platform/kafka/init-topics.sh`](../platform/kafka/init-topics.sh) (idempotent, awk-parsed — image ships no python/yq).
 - [x] Create the four topics: `hyperliquid.book-diffs` (6p), `hyperliquid.order-statuses` (6p), `hyperliquid.fills` (3p), `hyperliquid.node-files` (3p, seals). (`node-snapshots` parked.)
 - [x] Verify topics + partitions + `retention.ms=259200000` via `--describe`.
 - [x] Console round-trip in-network (`kafka:29092`) and on the host listener (`localhost:9092`) — both pass.
@@ -277,7 +277,7 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 - [ ] Nessie REST catalog: boots, reachable at `http://iceberg-catalog:19120/api/v1` (or current endpoint), config in `flink-conf`/catalog properties.
 - [ ] MinIO: bucket create (e.g. `hyperdata-warehouse`), lifecycle sane for dev; S3 endpoint + path-style access wired into catalog + job configs.
 
-**Job skeleton (`hyperdata-ingestion-flink/parse-node-outputs`, Java fat-jar):**
+**Job skeleton (`jobs/flink/parse-node-outputs`, Java fat-jar):**
 
 - [ ] Maven layout with shade plugin → one self-contained jar per job version (kafka-connector + flink-iceberg + iceberg-runtime bundled).
 - [ ] Bounded entry mode: `--source files --input <dir>` → enumerate corpus files → parse → sink.
@@ -319,7 +319,7 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 - [ ] **Seal the book:** on snapshot-file notification (Phase 2's `periodic_abci_states` events), re-baseline keyed state against ground truth, emit a `sealed_checkpoint` record (book hash, level counts, order counts, drift metrics).
 - [ ] **Check correctness:** compare incrementally-built state vs. re-baselined state; emit drift telemetry (this is the "free correctness oracle" from the design, live).
 - [ ] Language: PyFlink acceptable here (samples/showcase tier, iteration speed over throughput) — production core stays Java.
-- [ ] Home: `hyperdata-ingestion-flink/` as a second job (`l4-premodeling` or under `samples/` first, promoted if it graduates).
+- [ ] Home: `jobs/flink/` as a second job (`l4-premodeling` or under `samples/` first, promoted if it graduates).
 
 **Acceptance:** a demo run showing book state building live, a snapshot arrival, and a `sealed_checkpoint` with zero (or reported) drift.
 
@@ -335,7 +335,7 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 | Snapshot-aligned backfill PoC (one historical day) | After live path is green — needs snapshot parsing + Airflow (dynamic task mapping) which is platform-layer scope. |
 | Real `hyperdata-node` container build + live p2p run | Current placeholder keeps the volume warm; real image when we wire the actual node binary into compose. |
 | `socket-listeners/` (other CEX/DEX venues) | Second source triggers the `services/sources/` reorg discussion + topic naming generalization (`<venue>.files`?). |
-| Kafka → platform promotion | When transformation/serving consume Kafka directly (per infra placement rule). |
+| Kafka → platform promotion | **Done 2026-09-24:** moved to [`platform/kafka/`](../platform/kafka/) as a platform system (submitter-owned broker, not a layer service); services slice includes its compose fragment. Future consumers (transformation/serving) include the same fragment. |
 | Prod hardening | `KAFKA_AUTO_CREATE_TOPICS=false`, replication 3, SASL/mTLS, topic retention policy (notifications are short-lived: ~24–72h), schema registry (plain JSON now; Avro/Protobuf when a second consumer appears). |
 
 ---
