@@ -27,7 +27,8 @@ services:
       - clickhouse-data:/var/lib/clickhouse
       - ./config/users.xml:/etc/clickhouse-server/users.d/hyperdata.xml:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8123/ping || exit 1"]
+      # image ships no curl; use the native client instead
+      test: ["CMD-SHELL", "clickhouse-client --query \"SELECT 1\""]
       interval: 10s
       timeout: 10s
       retries: 10

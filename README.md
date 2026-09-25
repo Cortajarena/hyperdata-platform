@@ -1,6 +1,12 @@
 # About HyperData Platform
 
-![Version](https://img.shields.io/badge/version-0.0.1-blue) ![License](https://img.shields.io/badge/license-open--source-orange) ![Python](https://img.shields.io/badge/python-3.11%2B-green) ![Docker](https://img.shields.io/badge/docker-2496ED?logo=docker&logoColor=white) ![Kubernetes](https://img.shields.io/badge/Helm%20%2B%20K8S-326CE5?logo=kubernetes&logoColor=white) ![Airflow](https://img.shields.io/badge/Airflow-017CEE?logo=apacheairflow&logoColor=white) ![dbt](https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white) ![Spark](https://img.shields.io/badge/spark-E25A1B?logo=apachespark&logoColor=white) ![Flink](https://img.shields.io/badge/Flink-E6526F?logo=apacheflink&logoColor=white) ![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white)
+| Category | Badges |
+|----------|--------|
+| Release | ![Version](https://img.shields.io/badge/version-0.0.1-blue) · ![License](https://img.shields.io/badge/license-open--source-orange) |
+| Languages | ![Python](https://img.shields.io/badge/python-3.11%2B-green) |
+| Infrastructure | ![Docker](https://img.shields.io/badge/docker-2496ED?logo=docker&logoColor=white) · ![Kubernetes](https://img.shields.io/badge/Helm%20%2B%20K8S-326CE5?logo=kubernetes&logoColor=white) |
+| Streaming | ![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white) · ![Flink](https://img.shields.io/badge/Flink-E6526F?logo=apacheflink&logoColor=white) |
+| Modeling & orchestration | ![dbt](https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white) · ![Spark](https://img.shields.io/badge/spark-E25A1B?logo=apachespark&logoColor=white) · ![Airflow](https://img.shields.io/badge/Airflow-017CEE?logo=apacheairflow&logoColor=white) |
 
 **HyperData** is an open-source **data platform for financial data** — an open-source alternative to the Glassnode / Dune / CryptoQuant / Flipside / Nansen class of products.
 
