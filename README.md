@@ -2,12 +2,12 @@
 
 | Category | Badges |
 |----------|--------|
-| Release | ![Version](https://img.shields.io/badge/version-0.1.0-blue) · ![License](https://img.shields.io/badge/license-open--source-orange) |
-| Languages | ![Python](https://img.shields.io/badge/python-3.11%2B-green) |
-| Infrastructure | ![Docker](https://img.shields.io/badge/compose-%E2%89%A52.20-2496ED?logo=docker&logoColor=white) · ![Kubernetes](https://img.shields.io/badge/K8s-1.37-326CE5?logo=kubernetes&logoColor=white) · ![KinD](https://img.shields.io/badge/KinD-0.33-326CE5) |
-| Streaming | ![Kafka](https://img.shields.io/badge/Kafka-3.9.0-231F20?logo=apachekafka&logoColor=white) · ![Flink](https://img.shields.io/badge/Flink-1.18-E6526F?logo=apacheflink&logoColor=white) · ![Trino](https://img.shields.io/badge/Trino-pending-yellow) |
-| Modeling & orchestration | ![dbt](https://img.shields.io/badge/dbt-1.12-FF694B?logo=dbt&logoColor=white) · ![Spark](https://img.shields.io/badge/Spark-3.5.1-E25A1B?logo=apachespark&logoColor=white) · ![Airflow](https://img.shields.io/badge/Airflow-2.9.1-017CEE?logo=apacheairflow&logoColor=white) |
-| Serving | ![ClickHouse](https://img.shields.io/badge/ClickHouse-26.9-yellow) |
+| Release | [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/Cortajarena/hyperdata-platform) [![License](https://img.shields.io/badge/license-open--source-orange)](https://github.com/Cortajarena/hyperdata-platform) |
+| Languages | [![Python](https://img.shields.io/badge/python-3.11%2B-green)](https://www.python.org/downloads/release/python-3110/) |
+| Infrastructure | [![Docker](https://img.shields.io/badge/compose-%E2%89%A52.20-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/) [![Kubernetes](https://img.shields.io/badge/K8s-1.37-326CE5?logo=kubernetes&logoColor=white)](https://github.com/kubernetes/kubernetes/releases/tag/v1.37.0) [![KinD](https://img.shields.io/badge/KinD-0.33-326CE5)](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0) |
+| Streaming | [![Kafka](https://img.shields.io/badge/Kafka-3.9.0-231F20?logo=apachekafka&logoColor=white)](https://github.com/apache/kafka/releases/tag/v3.9.0) [![Flink](https://img.shields.io/badge/Flink-1.18-E6526F?logo=apacheflink&logoColor=white)](https://github.com/apache/flink/releases/tag/release-1.18.0) [![Trino](https://img.shields.io/badge/Trino-pending-yellow)](https://trino.io/download.html) |
+| Modeling & orchestration | [![dbt](https://img.shields.io/badge/dbt-1.12-FF694B?logo=dbt&logoColor=white)](https://github.com/dbt-labs/dbt-core/releases/tag/v1.12.5) [![Spark](https://img.shields.io/badge/Spark-3.5.1-E25A1B?logo=apachespark&logoColor=white)](https://github.com/apache/spark/releases/tag/v3.5.1) [![Airflow](https://img.shields.io/badge/Airflow-2.9.1-017CEE?logo=apacheairflow&logoColor=white)](https://github.com/apache/airflow/releases/tag/2.9.1) |
+| Serving | [![ClickHouse](https://img.shields.io/badge/ClickHouse-26.9-yellow)](https://github.com/ClickHouse/ClickHouse/releases/latest) |
 
 **HyperData** is an open-source **data platform for financial data** — an open-source alternative to the Glassnode / Dune / CryptoQuant / Flipside / Nansen class of products.
 
