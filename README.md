@@ -4,8 +4,8 @@
 |----------|--------|
 | Release | ![Version](https://img.shields.io/badge/version-0.1.0-blue) · ![License](https://img.shields.io/badge/license-open--source-orange) |
 | Languages | ![Python](https://img.shields.io/badge/python-3.11%2B-green) |
-| Infrastructure | ![Docker](https://img.shields.io/badge/compose-%E2%89%A52.20-2496ED?logo=docker&logoColor=white) · ![Kubernetes](https://img.shields.io/badge/K8s%201.37%20%2B%20kind%200.33-326CE5?logo=kubernetes&logoColor=white) |
-| Streaming | ![Kafka](https://img.shields.io/badge/Kafka-3.9.0-231F20?logo=apachekafka&logoColor=white) · ![Flink](https://img.shields.io/badge/Flink-1.18-E6526F?logo=apacheflink&logoColor=white) |
+| Infrastructure | ![Docker](https://img.shields.io/badge/compose-%E2%89%A52.20-2496ED?logo=docker&logoColor=white) · ![Kubernetes](https://img.shields.io/badge/K8s-1.37-326CE5?logo=kubernetes&logoColor=white) · ![KinD](https://img.shields.io/badge/KinD-0.33-326CE5) |
+| Streaming | ![Kafka](https://img.shields.io/badge/Kafka-3.9.0-231F20?logo=apachekafka&logoColor=white) · ![Flink](https://img.shields.io/badge/Flink-1.18-E6526F?logo=apacheflink&logoColor=white) · ![Trino](https://img.shields.io/badge/Trino-pending-yellow) |
 | Modeling & orchestration | ![dbt](https://img.shields.io/badge/dbt-1.12-FF694B?logo=dbt&logoColor=white) · ![Spark](https://img.shields.io/badge/Spark-3.5.1-E25A1B?logo=apachespark&logoColor=white) · ![Airflow](https://img.shields.io/badge/Airflow-2.9.1-017CEE?logo=apacheairflow&logoColor=white) |
 | Serving | ![ClickHouse](https://img.shields.io/badge/ClickHouse-26.9-yellow) |
 
