@@ -2,11 +2,12 @@
 
 | Category | Badges |
 |----------|--------|
-| Release | ![Version](https://img.shields.io/badge/version-0.0.1-blue) · ![License](https://img.shields.io/badge/license-open--source-orange) |
+| Release | ![Version](https://img.shields.io/badge/version-0.1.0-blue) · ![License](https://img.shields.io/badge/license-open--source-orange) |
 | Languages | ![Python](https://img.shields.io/badge/python-3.11%2B-green) |
-| Infrastructure | ![Docker](https://img.shields.io/badge/docker-2496ED?logo=docker&logoColor=white) · ![Kubernetes](https://img.shields.io/badge/Helm%20%2B%20K8S-326CE5?logo=kubernetes&logoColor=white) |
-| Streaming | ![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white) · ![Flink](https://img.shields.io/badge/Flink-E6526F?logo=apacheflink&logoColor=white) |
-| Modeling & orchestration | ![dbt](https://img.shields.io/badge/dbt-FF694B?logo=dbt&logoColor=white) · ![Spark](https://img.shields.io/badge/spark-E25A1B?logo=apachespark&logoColor=white) · ![Airflow](https://img.shields.io/badge/Airflow-017CEE?logo=apacheairflow&logoColor=white) |
+| Infrastructure | ![Docker](https://img.shields.io/badge/compose-%E2%89%A52.20-2496ED?logo=docker&logoColor=white) · ![Kubernetes](https://img.shields.io/badge/K8s%201.37%20%2B%20kind%200.33-326CE5?logo=kubernetes&logoColor=white) |
+| Streaming | ![Kafka](https://img.shields.io/badge/Kafka-3.9.0-231F20?logo=apachekafka&logoColor=white) · ![Flink](https://img.shields.io/badge/Flink-1.18-E6526F?logo=apacheflink&logoColor=white) |
+| Modeling & orchestration | ![dbt](https://img.shields.io/badge/dbt-1.12-FF694B?logo=dbt&logoColor=white) · ![Spark](https://img.shields.io/badge/Spark-3.5.1-E25A1B?logo=apachespark&logoColor=white) · ![Airflow](https://img.shields.io/badge/Airflow-2.9.1-017CEE?logo=apacheairflow&logoColor=white) |
+| Serving | ![ClickHouse](https://img.shields.io/badge/ClickHouse-26.9-yellow) |
 
 **HyperData** is an open-source **data platform for financial data** — an open-source alternative to the Glassnode / Dune / CryptoQuant / Flipside / Nansen class of products.
 
@@ -50,7 +51,7 @@ make kind-up                                               # minimal local Kuber
 
 ## Ingestion layer: distributed (batch) ingestion & stateful streaming
 
-The full ingestion design — live node, replay-as-tap (progressive append), sidecar line-tailing to per-table Kafka topics, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[docs/ingestion.md](docs/ingestion.md)**. Milestones for v0.0.1 are tracked there.
+The full ingestion design — live node, replay-as-tap (progressive append), sidecar line-tailing to per-table Kafka topics, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[docs/ingestion.md](docs/ingestion.md)**. Milestones for v0.1.0 are tracked there.
 
 Near-term milestones: ingestion of **HyperCore** node outputs (order diffs, trades, etc.), plus the HyperCore node sidecar issuing Kafka messages for all tables (topics) — tailing/polling approach, near real time is good enough.
 
@@ -72,7 +73,7 @@ Summary of the layer:
 
 ## Orchestration, data modeling and transformation layer
 
-Modeling, Iceberg maintenance and custom distributed jobs live in **[docs/transformation.md](docs/transformation.md)** (dbt, Spark). Milestones for v0.0.1 are tracked there. Orchestration itself (schedules, dependencies, backfills of tasks) is owned by `platform/airflow`.
+Modeling, Iceberg maintenance and custom distributed jobs live in **[docs/transformation.md](docs/transformation.md)** (dbt, Spark). Milestones for v0.1.0 are tracked there. Orchestration itself (schedules, dependencies, backfills of tasks) is owned by `platform/airflow`.
 
 ## Data serving & analytics layer
 

@@ -107,7 +107,7 @@ Deltas are not self-contained (an order resting for hours spans many files), but
 | Parse → Parquet → Iceberg job | `jobs/flink/parse-node-outputs` | Flink (Java fat-jar) |
 | Iceberg maintenance (compaction, snapshot expiry) | `jobs/spark` | Spark / Trino, Airflow-scheduled |
 
-**Milestones (v0.0.1):**
+**Milestones (v0.1.0):**
 
 - [ ] Sidecar (line tailer): appended lines → per-table data-plane topics + hour-file seals on `hyperliquid.node-files` (Kafka in KRaft mode via docker-compose).
 - [ ] Flink job `parse-node-outputs`, bounded mode over a corpus window (replay-as-backfill PoC).

@@ -29,7 +29,7 @@ ingestion (services/* + jobs/flink)  ──►  hypercore.* / hyperevm.* raw Ice
 - **Iceberg maintenance belongs to Spark here**, not to the ingestion Flink jobs — `rewrite_data_files` / `expire_snapshots` run as scheduled batch actions ([Iceberg maintenance procedures](https://iceberg.apache.org/docs/latest/maintenance/)).
 - **Orchestration** (dependencies, schedules) is owned by `platform/airflow`, not by the services themselves.
 
-**Milestones (v0.0.1):**
+**Milestones (v0.1.0):**
 
 - [ ] dbt wired to the Iceberg catalog (via Spark/Trino session): staging models over `hypercore.*` raw tables.
 - [ ] Data-quality tests: not-null / unique / accepted-values on core marts.
