@@ -19,6 +19,9 @@
       <a href="#stack">Stack</a>
       <a href="https://github.com/Cortajarena/hyperdata-platform" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/Cortajarena/hyperdata-platform/tree/main/docs" target="_blank" rel="noopener">Docs ↗</a>
+      <a class="stars" href="https://github.com/Cortajarena/hyperdata-platform/stargazers" target="_blank" rel="noopener">
+        <img src="https://img.shields.io/github/stars/Cortajarena/hyperdata-platform?style=social&logo=github&labelColor=0F1520" alt="GitHub stars">
+      </a>
     </div>
   </div>
 </nav>
@@ -35,7 +38,7 @@
       CEX) and EVM-based blockchains.
     </p>
     <div class="hero-cta">
-      <a class="btn primary" href="https://github.com/Cortajarena/hyperdata-platform" target="_blank" rel="noopener">★ Star on GitHub</a>
+      <a class="btn primary" href="https://github.com/Cortajarena/hyperdata-platform" target="_blank" rel="noopener">★ Star on GitHub <span id="star-count"></span></a>
       <a class="btn" href="https://github.com/Cortajarena/hyperdata-platform/tree/main/docs" target="_blank" rel="noopener">Read the design docs</a>
     </div>
     <div class="featured">
@@ -107,6 +110,19 @@
     <a href="https://github.com/Cortajarena/hyperdata-platform" target="_blank" rel="noopener">Cortajarena/hyperdata-platform</a>
   </div>
 </footer>
+
+<script>
+  // Live star count in the hero button (GitHub API is CORS-open; 60 req/hr/IP).
+  fetch("https://api.github.com/repos/Cortajarena/hyperdata-platform")
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !d.stargazers_count) return;
+      const n = d.stargazers_count;
+      document.getElementById("star-count").textContent =
+        n >= 1000 ? "· " + (n / 1000).toFixed(1) + "k" : "· " + n;
+    })
+    .catch(() => {}); // badge stays clean if the fetch fails
+</script>
 
 </body>
 </html>
