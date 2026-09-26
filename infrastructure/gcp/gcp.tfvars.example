@@ -1,0 +1,4 @@
+project_id  = "your-gcp-project-id"
+region      = "europe-west1"
+state_bucket = "hyperdata-platform-tfstate"
+# cluster_name = "hyperdata-gke"
