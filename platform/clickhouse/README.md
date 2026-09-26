@@ -19,7 +19,7 @@ from `compose.yaml`):
 
 ```bash
 curl 'http://localhost:8123/ping'                                        # -> Ok. (no auth: ping is open)
-curl --user 'hyperdata:hyperdata-dev' 'http://localhost:8123/?query=SELECT 1'
+curl --user '<CLICKHOUSE_USER>:<CLICKHOUSE_PASSWORD>' 'http://localhost:8123/?query=SELECT 1'
 ```
 
 In-network / native protocol:
