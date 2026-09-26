@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HyperData — open-source financial data platform</title>
+  <meta name="description" content="HyperData is an open-source data platform for financial data — an open alternative to Glassnode, Dune, CryptoQuant and Nansen, built on HyperLiquid.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2300E8A0'/><text x='50' y='68' font-size='54' font-family='system-ui' font-weight='bold' text-anchor='middle' fill='%230A0E14'>H</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ==== Nav ==== -->
+<nav>
+  <div class="container nav-inner">
+    <a class="brand" href="#">H<span>yper</span>Data</a>
+    <div class="nav-links">
+      <a href="#why">Why HyperLiquid</a>
+      <a href="#stack">Stack</a>
+      <a href="https://github.com/Cortajarena/hyperdata-platform" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/Cortajarena/hyperdata-platform/tree/main/docs" target="_blank" rel="noopener">Docs ↗</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ==== Hero ==== -->
+<header class="hero" id="why">
+  <div class="container">
+    <div class="pill">Work in progress · v0.1.0</div>
+    <h1>The open-source<br><span class="accent">financial data platform</span></h1>
+    <p class="lede">
+      An open-source alternative to the Glassnode / Dune / CryptoQuant / Nansen class of
+      products. A complete boilerplate data platform — ingestion, warehouse, serving —
+      with first-class support for event-based financial systems (CLOB / order book /
+      CEX) and EVM-based blockchains.
+    </p>
+    <div class="hero-cta">
+      <a class="btn primary" href="https://github.com/Cortajarena/hyperdata-platform" target="_blank" rel="noopener">★ Star on GitHub</a>
+      <a class="btn" href="https://github.com/Cortajarena/hyperdata-platform/tree/main/docs" target="_blank" rel="noopener">Read the design docs</a>
+    </div>
+    <div class="featured">
+      <span class="featured-label">Launching on</span>
+      <span class="featured-name">HyperLiquid</span>
+      <span class="featured-note">HyperCore + HyperEVM — a dual-chain proving ground for real financial workloads</span>
+    </div>
+  </div>
+</header>
+
+<!-- ==== Why ==== -->
+<section id="why">
+  <div class="container">
+    <h2>Why HyperLiquid?</h2>
+    <p class="section-lede">
+      Its dual-chain architecture is the perfect testbed for a fully capable financial
+      data platform.
+    </p>
+    <div class="grid two">
+      <div class="card">
+        <h3>HyperCore</h3>
+        <p>A real stress test in volume and state: billions of order-book events, with
+        stateful processing challenges like the L4 address book — tracking state
+        per address, per asset.</p>
+      </div>
+      <div class="card">
+        <h3>HyperEVM</h3>
+        <p>The classic EVM pattern, approached in ELT style the way Dune and Glassnode
+        do it: raw chain data in, smart-contract calls parsed, transformations and
+        metric models built on top.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==== Stack ==== -->
+<section id="stack">
+  <div class="container">
+    <h2>The stack</h2>
+    <p class="section-lede">A pragmatic monorepo: ingestion &rarr; Kafka &rarr; Iceberg warehouse (Nessie + MinIO) &rarr; serving (ClickHouse, dbt, Spark, Trino), orchestrated with Airflow, with Flink for stateful streams.</p>
+    <div class="grid four">
+      <div class="card"><h4>Ingestion</h4><p>Hyperliquid node &amp; indexer services, replay-as-tap into Kafka topics.</p></div>
+      <div class="card"><h4>Streaming</h4><p>Apache Kafka 3.9, Flink 1.18 for bounded &amp; unbounded stateful processing.</p></div>
+      <div class="card"><h4>Warehouse</h4><p>Apache Iceberg on Nessie + MinIO; transformations via dbt 1.12 &amp; Spark 3.5.</p></div>
+      <div class="card"><h4>Serving</h4><p>ClickHouse 26.9 projections, Trino queries, Airflow-scheduled freshness.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==== Badges ==== -->
+<section>
+  <div class="container badges-row">
+    <img src="https://img.shields.io/badge/version-0.1.0-blue" alt="version">
+    <img src="https://img.shields.io/badge/license-open--source-orange" alt="license">
+    <img src="https://img.shields.io/badge/python-3.11%2B-green" alt="python">
+    <img src="https://img.shields.io/badge/Kafka-3.9.0-231F20?logo=apachekafka&logoColor=white" alt="kafka">
+    <img src="https://img.shields.io/badge/Flink-1.18-E6526F?logo=apacheflink&logoColor=white" alt="flink">
+    <img src="https://img.shields.io/badge/dbt-1.12-FF694B?logo=dbt&logoColor=white" alt="dbt">
+    <img src="https://img.shields.io/badge/Spark-3.5.1-E25A1B?logo=apachespark&logoColor=white" alt="spark">
+    <img src="https://img.shields.io/badge/Airflow-2.9.1-017CEE?logo=apacheairflow&logoColor=white" alt="airflow">
+    <img src="https://img.shields.io/badge/ClickHouse-26.9-yellow" alt="clickhouse">
+  </div>
+</section>
+
+<!-- ==== Footer ==== -->
+<footer>
+  <div class="container">
+    <span>HyperData</span> — open-source financial data platform ·
+    <a href="https://github.com/Cortajarena/hyperdata-platform" target="_blank" rel="noopener">Cortajarena/hyperdata-platform</a>
+  </div>
+</footer>
+
+</body>
+</html>
