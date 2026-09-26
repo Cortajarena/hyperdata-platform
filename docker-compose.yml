@@ -18,7 +18,7 @@ x-airflow-common: &airflow-common
     context: ./platform/airflow
   environment:
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${HYPERDATA_PG_USER:-airflow}:${HYPERDATA_PG_PASSWORD:-airflow}@postgres:5432/airflow
   volumes:
     - ./platform/airflow/dags:/opt/airflow/dags
     - ./jobs/dbt:/opt/airflow/dbt
@@ -32,13 +32,13 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
+      - POSTGRES_USER=${HYPERDATA_PG_USER:-airflow}
+      - POSTGRES_PASSWORD=${HYPERDATA_PG_PASSWORD:-airflow}
+      - POSTGRES_DB=${POSTGRES_DB:-airflow}
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${HYPERDATA_PG_USER:-airflow}"]
       interval: 5s
       timeout: 5s
       retries: 5

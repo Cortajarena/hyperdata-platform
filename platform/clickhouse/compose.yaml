@@ -16,9 +16,10 @@ services:
     profiles: [serving]
     environment:
       # dev-only credentials (image hardens the default user away otherwise);
-      # rotate/replace during the serving tier's real rollout
-      CLICKHOUSE_USER: hyperdata
-      CLICKHOUSE_PASSWORD: hyperdata-dev
+      # rotate/replace during the serving tier's real rollout.
+      # values come from optional `.env` (see .env.example) with these defaults
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-hyperdata}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-hyperdata-dev}
     ports:
       - "8123:8123"     # HTTP interface (single-node quickstart, no client needed)
       - "9100:9000"     # native protocol (in-network stays clickhouse:9000;
