@@ -10,3 +10,6 @@
 [submodule "hyperdata-ingestion-flink"]
 	path = jobs/flink
 	url = git@github.com:Cortajarena/hyperdata-ingestion-flink.git
+[submodule "hyperdata-indexer-hypercore"]
+	path = services/hyperdata-indexer-hypercore
+	url = git@github.com:Cortajarena/hyperdata-indexer-hypercore.git
