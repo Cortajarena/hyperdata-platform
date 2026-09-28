@@ -1,0 +1,61 @@
+# HyperData docs — built by CI into site/docs/ and served at
+# https://cortajarena.github.io/hyperdata-platform/docs/
+#
+# Two kinds of page, two kinds of truth:
+#   - Cross-cutting docs live in docs/ and are hand-written here (nav below).
+#   - Per-component docs are the component's own README.md, versioned in the
+#     component's repository. They are NOT copied into docs/: the
+#     build_components hook renders that tree into /components/ and generates
+#     the matching nav, so adding a service or a README needs no edit here.
+#
+# Tooling (not published): mkdocs/requirements.txt, mkdocs/hooks/.
+
+site_name: HyperData Platform
+site_description: Open-source data platform for financial data — CLOB / order book / EVM
+
+# The landing page is the tracked static site/ (deployed at the repo root);
+# these docs are built into site/docs/ and served under /docs. site_url MUST
+# carry the /docs prefix, otherwise absolute asset URLs 404 under the subpath.
+# site_dir is deliberately site/docs (not site) — `mkdocs build --clean` would
+# otherwise delete the landing page.
+site_url: https://cortajarena.github.io/hyperdata-platform/docs/
+site_dir: site/docs
+
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    # Dark only, matching the landing page; green accents come from
+    # docs/styles/brand.css (same tokens as site/styles.css).
+    scheme: slate
+    primary: black
+    accent: green
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+extra_css:
+  - styles/brand.css
+
+hooks:
+  - mkdocs/hooks/build_components.py
+
+# The Components pages are generated and added to the nav by the hook, which
+# runs after this check — so silence the "not in nav" notice for them. They can
+# never be orphaned: nav and pages come from the same walk.
+not_in_nav: |
+  /components/*
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Getting Started: getting-started.md
+  - Ingestion: ingestion.md
+  - Transformation: transformation.md
+  # "Components" is appended by the build_components hook from the repo tree.

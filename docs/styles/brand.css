@@ -1,0 +1,57 @@
+/* HyperData brand theme — the docs mirror the landing page palette.
+   Landing tokens (site/styles.css): bg #0A0E14, bg-2 #0F1520, card #121A26,
+   border #1E2A3A, text #E6EDF3, muted #8B99AB, accent #00E8A0 (hyperliquid
+   green), accent-2 #6E7BF2. */
+
+:root,
+[data-md-color-scheme="slate"] {
+  /* surfaces */
+  --md-default-bg-color: #0a0e14;
+  --md-default-bg-color--light: #121a26;
+  --md-code-bg-color: #121a26;
+  --md-primary-bg-color: #0f1520;
+  --md-primary-bg-color--light: #121a26;
+  --md-accent-bg-color--transparent: rgba(0, 232, 160, 0.1);
+
+  /* text */
+  --md-default-fg-color: #e6edf3;
+  --md-default-fg-color--light: #8b99ab;
+  --md-primary-fg-color: #e6edf3;
+  --md-accent-fg-color: #00e8a0;
+  --md-typeset-a-color: #2cf0b3;
+
+  /* lines */
+  --md-default-fg-color--lighter: #1e2a3a;
+  --md-typeset-table-color: #1e2a3a;
+}
+
+/* Header: same dark gradient as the landing page, green hairline. */
+.md-header {
+  background: linear-gradient(180deg, #0f1520, #0a0e14);
+  border-bottom: 1px solid #1e2a3a;
+}
+
+/* Green underline on the active nav entry + tab. */
+.md-tabs__link--active,
+.md-nav__item--active > .md-nav__link {
+  color: #00e8a0;
+}
+.md-nav__link--active,
+.md-nav__link:hover {
+  color: #2cf0b3;
+}
+.md-typeset a:hover {
+  color: #00e8a0;
+}
+
+/* Cards / code / tables pick up the border colour. */
+.md-typeset code,
+.md-typeset pre {
+  border-color: #1e2a3a;
+}
+.md-typeset table th {
+  background-color: #121a26;
+}
+.md-typeset hr {
+  border-bottom-color: #1e2a3a;
+}

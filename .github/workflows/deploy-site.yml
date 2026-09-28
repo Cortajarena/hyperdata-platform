@@ -9,6 +9,14 @@ on:
     paths:
       - "site/**"
       - "docs/**"
+      - "mkdocs.yml"
+      - "mkdocs/**"
+      # Component trees: their READMEs are rendered into the docs, and bumping a
+      # submodule pointer changes the tree too (the gitlink path is the dir itself).
+      - "services/**"
+      - "jobs/**"
+      - "platform/**"
+      - "infrastructure/**"
       - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 
@@ -35,14 +43,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: docs/requirements.txt
+          cache-dependency-path: mkdocs/requirements.txt
       - name: Build docs into site/docs
         run: |
-          pip install -r docs/requirements.txt
+          pip install -r mkdocs/requirements.txt
           # --strict: a warning (dead link, page missing from nav) fails the build.
-          # Narrative docs link repo files with absolute GitHub URLs so they
-          # resolve both on GitHub and on the published site.
-          mkdocs build --strict -f docs/mkdocs.yml
+          mkdocs build --strict -f mkdocs.yml
       - uses: actions/configure-pages@v5
         with:
           enablement: true

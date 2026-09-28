@@ -3,3 +3,7 @@ tmp/
 
 # mkdocs build output (site/ itself is tracked; site/docs/ is generated)
 site/docs/
+
+# python bytecode (docs build hook)
+__pycache__/
+*.pyc
