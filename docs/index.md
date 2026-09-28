@@ -27,5 +27,5 @@ make logs      # follow logs
 - Spark UI: <http://localhost:9090>
 - Postgres: `localhost:5432`
 
-See the [Getting Started](getting-started/installation.md) guide for a full
+See the [Getting Started](getting-started.md) guide for a full
 walkthrough.

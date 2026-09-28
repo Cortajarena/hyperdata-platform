@@ -1,2 +1,5 @@
 tmp/
 .env
+
+# mkdocs build output (site/ itself is tracked; site/docs/ is generated)
+site/docs/

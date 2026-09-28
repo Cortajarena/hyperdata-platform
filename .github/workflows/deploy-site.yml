@@ -1,11 +1,15 @@
-# Deploy the static landing page (site/) to GitHub Pages.
+# Deploy the site to GitHub Pages: the tracked static landing page (site/) at
+# the root, plus the mkdocs docs built into site/docs/ (served at /docs).
 # Settings → Pages → Source: "GitHub Actions"
 name: deploy-site
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/deploy-site.yml"]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 
 permissions:
@@ -25,6 +29,20 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive   # docs may source content from service submodules
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+      - name: Build docs into site/docs
+        run: |
+          pip install -r docs/requirements.txt
+          # --strict: a warning (dead link, page missing from nav) fails the build.
+          # Narrative docs link repo files with absolute GitHub URLs so they
+          # resolve both on GitHub and on the published site.
+          mkdocs build --strict -f docs/mkdocs.yml
       - uses: actions/configure-pages@v5
         with:
           enablement: true

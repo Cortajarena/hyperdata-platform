@@ -1,12 +1,32 @@
 site_name: Hyperdata Platform
 site_description: Unified polyglot data platform monorepo
 
+# The landing page is the tracked static site/ (deployed at the repo root);
+# these docs are built into site/docs/ and served under /docs. site_url MUST
+# carry the /docs/ prefix, otherwise absolute asset URLs 404 under the
+# subpath. site_dir is deliberately site/docs (not site) — `mkdocs build
+# --clean` would otherwise delete the landing page.
+site_url: https://cortajarena.github.io/hyperdata-platform/docs/
+site_dir: ../site/docs
+
+# Content lives in this same directory (flat, no docs/docs/ nesting). Set
+# explicitly because mkdocs >= 1.5 defaults docs_dir to `docs/` *relative to
+# this file* — the implicit default is what left ingestion.md and
+# transformation.md outside the content dir with a nav that could not
+# resolve them. Flat also keeps their repo-relative links (../services/…)
+# correct as written.
+docs_dir: .
+
 theme:
   name: material
 
+# Nav is the "main first level link tree": cross-cutting docs only. Per
+# component truth lives in the subtree READMEs, linked from Components
+# (components.md) — one source of truth per fact, no mirroring yet.
 nav:
   - Home: index.md
   - Architecture: architecture.md
   - Getting Started: getting-started.md
   - Ingestion: ingestion.md
   - Transformation: transformation.md
+  - Components: components.md

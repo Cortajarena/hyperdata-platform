@@ -1,7 +1,7 @@
 # Transformation layer
 
 > Map, not a directory: this layer now lives as compute code in `jobs/dbt` and
-> `jobs/spark` (see [`jobs/README.md`](../jobs/README.md) for the placement
+> `jobs/spark` (see [`jobs/README.md`](https://github.com/Cortajarena/hyperdata-platform/blob/main/jobs/README.md) for the placement
 > rule). This doc keeps the layer's lansdcape — data contracts and ownership —
 > in one place.
 
@@ -20,8 +20,8 @@ ingestion (services/* + jobs/flink)  ──►  hypercore.* / hyperevm.* raw Ice
 
 | Compute | Role |
 | :--- | :--- |
-| [`jobs/dbt`](jobs/dbt/) | SQL transformation & tests over the warehouse: staging → intermediate → marts; data-quality tests, freshness checks. |
-| [`jobs/spark`](jobs/spark/) | Custom distributed jobs: Iceberg maintenance (compaction, snapshot expiry — Airflow-scheduled), wallet-graph algorithms, anything beyond SQL. |
+| [`jobs/dbt`](https://github.com/Cortajarena/hyperdata-platform/tree/main/jobs/dbt) | SQL transformation & tests over the warehouse: staging → intermediate → marts; data-quality tests, freshness checks. |
+| [`jobs/spark`](https://github.com/Cortajarena/hyperdata-platform/tree/main/jobs/spark) | Custom distributed jobs: Iceberg maintenance (compaction, snapshot expiry — Airflow-scheduled), wallet-graph algorithms, anything beyond SQL. |
 
 **Division of labor:**
 
