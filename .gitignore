@@ -1,9 +1,27 @@
+# --- local state ---
 tmp/
 .env
 
 # mkdocs build output (site/ itself is tracked; site/docs/ is generated)
 site/docs/
 
-# python bytecode (docs build hook)
+# --- python ---
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- build output ---
+build/
+dist/
+
+# --- os ---
+.DS_Store
