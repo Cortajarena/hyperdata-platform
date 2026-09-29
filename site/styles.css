@@ -35,8 +35,11 @@ nav {
   border-bottom: 1px solid var(--border);
 }
 .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-.brand { font-weight: 700; font-size: 1.15rem; color: var(--text); text-decoration: none; letter-spacing: -0.02em; }
-.brand span { color: var(--accent); }
+/* Brand is the logo image (assets/img/logo_green.svg, published into
+   docs/assets/ by the docs build — one canonical file, not two copies).
+   Sized by height so the 1000x200 wordmark keeps its aspect at any viewport. */
+.brand { display: flex; align-items: center; text-decoration: none; }
+.brand img { display: block; height: 28px; width: auto; }
 .nav-links { display: flex; gap: 24px; }
 .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.92rem; }
 .nav-links a:hover { color: var(--text); }

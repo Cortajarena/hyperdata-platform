@@ -263,7 +263,9 @@ One row per `(table, block_number)`. This is the "separate stream" for block-lev
 | `first_seen_at` | `timestamp('us', UTC)` | when the indexer first ingested it |
 | `complete` | `bool` | `true` once the next block's first line is seen, or at hour-file end |
 
-A block marked `complete` is safe to snapshot-align against. Rows are written in the **same transaction** as their events (pyiceberg's transaction API appends to both tables atomically), so `block_info` never claims completeness for events that were not committed.
+A block marked `complete` is safe to snapshot-align against. Rows are written **after** the events they describe, so a `complete` block_info row is proof that those events are already durable — which is what makes crash recovery decidable. `block_info` carries `source_file` for exactly that reason.
+
+> **Correction (2026-09-29, verified against pyiceberg 0.12):** this was originally specified as "written in the same transaction as their events". `pyiceberg` has **no cross-table transaction** — `Catalog` exposes no `transaction()`, and the only transaction object is per-table (`Table.transaction()`). The guarantee comes from **ordering**, not atomicity: events are appended first, `block_info` last. The residual duplicate window is a crash between those two appends, since Iceberg `append` is not idempotent; it is deduplicated downstream in dbt (`row_number` over `(source_file, block_number, log_index)`), not in the writer.
 
 ### Identity & idempotency (locked 2026-09-29)
 

@@ -1,4 +1,4 @@
-# About HyperData Platform
+![HyperData](assets/img/logo_green.svg)
 
 | Category | Badges |
 |----------|--------|

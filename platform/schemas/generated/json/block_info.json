@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Cortajarena/hyperdata-platform/blob/main/platform/schemas/generated/json/block_info.json",
+  "title": "hypercore.block_info",
+  "description": "Storage row contract for hypercore.block_info (from hypercore.v1.BlockInfoRow).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "table": {
+      "type": "string"
+    },
+    "source_file": {
+      "type": "string"
+    },
+    "block_number": {
+      "type": "integer"
+    },
+    "block_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "first_local_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_local_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "event_count": {
+      "type": "integer"
+    },
+    "log_index_min": {
+      "type": "integer"
+    },
+    "log_index_max": {
+      "type": "integer"
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "complete": {
+      "type": "boolean"
+    }
+  }
+}

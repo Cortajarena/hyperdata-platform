@@ -1,0 +1,50 @@
+// Envelope — fields shared by every HyperCore event row.
+//
+// Source: the JSONL envelope the node writes with --stream-with-block-info,
+// one object per line:
+//
+//   {"local_time":"...","block_time":"...","block_number":N,"events":[ ... ]}
+//
+// A LINE is the wire unit; an EVENT is the row unit. The normaliser broadcasts
+// these fields down onto every row it emits from that line.
+//
+// Two clocks, deliberately both kept:
+//   block_time — chain time. Constant for every line of a block. Partition key.
+//   local_time — node write time, per LINE (it advances within a block). Carried
+//                on the event row as the ingestion-lag signal.
+//
+// These messages describe the STORAGE ROW, not the wire line: the normaliser
+// owns the wire shape (the diff union, the fills tuple) and enforces the closed
+// variant set in code. See ../../README.md.
+syntax = "proto3";
+
+package hypercore.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Fields every event row carries, broadcast down from the wire envelope.
+message Envelope {
+  int64 block_number = 1;
+  // Nanosecond precision on the wire, truncated to microseconds here: that is
+  // Iceberg's timestamp precision, and hours()/days() partitioning needs a
+  // temporal type rather than a string.
+  google.protobuf.Timestamp block_time = 2;
+  google.protobuf.Timestamp local_time = 3;
+}
+
+// Row identity and provenance, repeated on every event row.
+//
+// The unit of idempotency is the sealed FILE, not the row: see
+// docs/ingestion.md, "Identity & idempotency". A ledger keyed
+// (source_file, sha256-of-file) makes a re-run a no-op, and
+// (block_number, log_index) stays an ordering coordinate — never a dedup key,
+// because a reorg re-emits the same block numbers.
+message RowMeta {
+  // 0-based position of this event within its block, across all lines of that
+  // block. Same counter the sidecar calls `seq_in_block` in its line-id header.
+  int64 log_index = 1;
+  // Path (or URI) of the hour-file this row came from.
+  string source_file = 2;
+  // When the indexer wrote it, for provenance and lag metrics.
+  google.protobuf.Timestamp ingest_ts = 3;
+}

@@ -26,6 +26,7 @@ How it works
 from __future__ import annotations
 
 import configparser
+import logging
 import pathlib
 import posixpath
 import re
@@ -35,6 +36,8 @@ from typing import Any
 
 from mkdocs.structure.files import File
 from mkdocs.structure.nav import Section
+
+log = logging.getLogger("mkdocs.hooks.build_components")
 
 # Repo roots whose subtree is documented here. `shared/` is intentionally
 # absent until it holds something real.
@@ -59,6 +62,15 @@ H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 SKIP_SUBTREES = {"services/hyperdata-indexer-evm/docs"}
 
 PLATFORM_REPO = "Cortajarena/hyperdata-platform"
+
+# Brand assets: published into the docs build from their canonical location in
+# the repo, rather than committed under docs/ as a second copy. A duplicated
+# logo is a logo that goes stale in one of the two places; this way there is
+# exactly one file (assets/img/) and the site, the docs header and the README
+# all render it.
+BRAND_ASSETS = {
+    "assets/logo_green.svg": "assets/img/logo_green.svg",
+}
 
 # Populated per build by _scan(); module-level so the nav hook and the file
 # hook (which mkdocs calls separately) share one walk.
@@ -380,6 +392,15 @@ def on_files(files, config, **kwargs):
 
     for section in _state["pages"]:
         walk(section)
+
+    for dest, source in BRAND_ASSETS.items():
+        path = root / source
+        if path.is_file():
+            files.append(
+                File.generated(config, dest, content=_read(path))
+            )
+        else:                                    # pragma: no cover
+            log.warning("brand asset missing, not published: %s", path)
     return files
 
 

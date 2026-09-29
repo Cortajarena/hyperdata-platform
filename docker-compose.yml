@@ -1,59 +1,23 @@
 # Root stack aggregator: platform systems + included slices.
-# Include: `- platform/kafka/compose.yaml` — cluster systems (Kafka, always-on)
-#          `- services/compose.yaml`      — deployable services slice
-# Platform workloads (postgres, airflow, flink cluster, spark master) are
-# declared directly here, below. Slices are also runnable standalone:
+# Include: `- platform/airflow/compose.yaml` — orchestration + its metadata DB
+#          `- platform/kafka/compose.yaml`     — cluster systems (Kafka, always-on)
+#          `- services/compose.yaml`            — deployable services slice
+# Slices are also runnable standalone:
 #   cd services && docker compose up
-# Conventions: no `version:` key (Compose ≥2.20), project name fixed
-# so included and standalone runs share the same identity. See README.
+#   cd platform/airflow && docker compose up
+# What is left here is what is not a platform system: the Flink session
+# cluster and the Spark master. Conventions: no `version:` key (Compose ≥2.20),
+# project name fixed so included and standalone runs share the same identity.
+# See README.
 
 name: hyperdata-platform
 
 include:
+  - platform/airflow/compose.yaml
   - platform/kafka/compose.yaml
   - services/compose.yaml
 
-x-airflow-common: &airflow-common
-  build:
-    context: ./platform/airflow
-  environment:
-    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${HYPERDATA_PG_USER:-airflow}:${HYPERDATA_PG_PASSWORD:-airflow}@postgres:5432/airflow
-  volumes:
-    - ./platform/airflow/dags:/opt/airflow/dags
-    - ./jobs/dbt:/opt/airflow/dbt
-    - /var/run/docker.sock:/var/run/docker.sock
-  depends_on:
-    postgres:
-      condition: service_healthy
-
 services:
-  # --- Databases ---
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=${HYPERDATA_PG_USER:-airflow}
-      - POSTGRES_PASSWORD=${HYPERDATA_PG_PASSWORD:-airflow}
-      - POSTGRES_DB=${POSTGRES_DB:-airflow}
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${HYPERDATA_PG_USER:-airflow}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # --- Orchestration Platform ---
-  airflow-webserver:
-    <<: *airflow-common
-    command: webserver
-    ports:
-      - "8080:8080"
-
-  airflow-scheduler:
-    <<: *airflow-common
-    command: scheduler
-
   # --- Stream Processing Platform ---
   flink-jobmanager:
     build:

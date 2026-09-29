@@ -1,0 +1,51 @@
+// Book diffs — per-order L4 book deltas.
+//
+// Wire:  node_raw_book_diffs_streaming/hourly/<date>/<hour>
+//   {"local_time":…,"block_time":…,"block_number":…,
+//    "events":[{"user":"0x…","oid":N,"coin":"LIT","side":"B","px":"1.5047",
+//               "raw_book_diff":{"update":{"origSz":"7.0","newSz":"0.0"}}}]}
+//
+// `raw_book_diff` is a three-way union on the wire:
+//
+//   {"new":    {"sz": "7.0"}}            ~49.7% of rows
+//   {"update": {"origSz": "7.0", "newSz": "0.0"}}   ~0.8%
+//   "remove"                             ~49.5%   (a bare JSON *string*)
+//
+// Arrow's JSON reader cannot parse that union (it rejects an object that turns
+// into a string mid-file), and neither can draft-07 JSON Schema express the
+// fills-style positional tuple. So the union is normalised into three plain
+// columns here, and the CLOSED VARIANT SET is enforced by the normaliser: a
+// fourth variant is a contract violation -> dead-letter + alert, never a silent
+// drop.
+syntax = "proto3";
+
+package hypercore.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// One row per book-diff event -> hypercore.raw_book_diffs.
+// Hidden partitioning: hours(block_time).
+message RawBookDiffRow {
+  int64 block_number = 1;
+  google.protobuf.Timestamp block_time = 2;
+  google.protobuf.Timestamp local_time = 3;
+  int64 log_index = 4;
+  string source_file = 5;
+  google.protobuf.Timestamp ingest_ts = 6;
+
+  string user = 7;
+  int64 oid = 8;
+  // ~40% of traffic is namespaced (xyz:*, cash:*, …) -> stays a string.
+  string coin = 9;
+  // "A" (ask) | "B" (bid). String, not an enum: it is a wire category.
+  string side = 10;
+  // Decimal, kept as a string; resolved in dbt staging.
+  string px = 11;
+
+  // Which variant this row carried: "new" | "update" | "remove".
+  string diff_type = 12;
+  // Populated for "update" only.
+  string orig_sz = 13;
+  // Populated for "new" and "update".
+  string new_sz = 14;
+}

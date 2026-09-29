@@ -1,0 +1,76 @@
+// Order statuses — per-order lifecycle events (placement, cancel, trigger,
+// rejection, …), carrying the full order object.
+//
+// Wire:  node_order_statuses_streaming/hourly/<date>/<hour>
+//   {"local_time":…,"block_time":…,"block_number":…,
+//    "events":[{"time":"2026-06-10T12:56:15.035481067",   // duplicate of
+//                                                        // block_time -> dropped
+//               "user":"0x…","hash":"0x…"|null,"builder":{"b":…,"f":N}|null,
+//               "status":"…","order":{ …16 fields…, "children":[…] }}]}
+//
+// Note `builder` is an OBJECT here ({b, f}, 99.3% null) while fills carries a
+// plain address string for the same field name — one more reason the contracts
+// are per table.
+syntax = "proto3";
+
+package hypercore.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// One row per order-status event -> hypercore.order_statuses.
+// Hidden partitioning: days(block_time) — this is the 52 GB/h table.
+message OrderStatusRow {
+  int64 block_number = 1;
+  google.protobuf.Timestamp block_time = 2;
+  google.protobuf.Timestamp local_time = 3;
+  int64 log_index = 4;
+  string source_file = 5;
+  google.protobuf.Timestamp ingest_ts = 6;
+
+  string user = 7;
+  // 11 observed values (6 of them rejection types) -> string, not an enum.
+  string status = 8;
+  // Transaction hash; 66.6% null.
+  string hash = 9;
+  BuilderInfo builder = 10;
+  Order order = 11;
+}
+
+// The node's builder-fee attribution, null on 99.3% of rows.
+message BuilderInfo {
+  string b = 1;
+  int64 f = 2;
+}
+
+message Order {
+  int64 oid = 1;
+  string coin = 2;
+  string side = 3;
+  // Decimals, kept as strings.
+  string limit_px = 4;
+  string sz = 5;
+  string orig_sz = 6;
+  // Epoch milliseconds (contrast: the dropped `time` above is an ISO string,
+  // and fills' `time` is epoch ms too).
+  int64 timestamp = 7;
+  // 4 observed values -> string.
+  string order_type = 8;
+  // 5 observed values; null for market orders (Stop Market, Take Profit
+  // Market), which is what the nullability has to preserve.
+  string tif = 9;
+  // 16-byte hex, 11.4% null.
+  string cloid = 10;
+  string trigger_condition = 11;
+  string trigger_px = 12;
+  bool is_trigger = 13;
+  bool is_position_tpsl = 14;
+  bool reduce_only = 15;
+
+  // Child orders (trigger / TP-SL), RECURSIVE on the wire. Max depth observed:
+  // 2, and only 3 of 200,000 lines have any child at all. Recursion is bounded
+  // at MAX_ORDER_DEPTH (3) when generating the Arrow/JSON schemas; anything
+  // deeper than the bound is preserved verbatim in children_overflow_json rather
+  // than dropped, because child orders matter for book reconstruction.
+  repeated Order children = 16;
+  string children_overflow_json = 17;
+}
