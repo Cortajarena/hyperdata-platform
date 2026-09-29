@@ -13,3 +13,6 @@
 [submodule "hyperdata-indexer-hypercore"]
 	path = services/hyperdata-indexer-hypercore
 	url = git@github.com:Cortajarena/hyperdata-indexer-hypercore.git
+[submodule "hyperdata-indexer-evm"]
+	path = services/hyperdata-indexer-evm
+	url = git@github.com:Cortajarena/hyperdata-indexer-evm.git
