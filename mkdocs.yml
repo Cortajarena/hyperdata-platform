@@ -34,7 +34,6 @@ theme:
   features:
     - content.code.copy
     - navigation.sections
-    - navigation.expand          # keep the component tree open at every level
     - navigation.indexes         # section titles link to their own index page
     - navigation.tracking
     - navigation.top
