@@ -1,0 +1,48 @@
+// Block info — the block-boundary table.
+//
+// Not a wire file: derived by the indexer while it walks a stream, one row per
+// (table, block_number). It is the block-level data that would otherwise be
+// denormalised onto every event row (block_time especially), and it doubles as
+// the block-boundary watermark that services/README.md requires ("watermark /
+// barrier record is part of the topic contract from day one") and that
+// snapshot-aligned backfill needs for its [S_i, S_i+1) segments.
+//
+// A block marked `complete` is safe to snapshot-align against: it is set once
+// the next block's first line has been seen, or at the end of an hour-file.
+// Rows are written in the SAME transaction as their events, so block_info can
+// never claim completeness for events that were not committed.
+syntax = "proto3";
+
+package hypercore.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// One row per (table, block_number) -> hypercore.block_info.
+// Hidden partitioning: days(block_time).
+message BlockInfoRow {
+  // Which stream the block was observed in: "raw_book_diffs" |
+  // "order_statuses" | "fills" (the table name, without the hypercore. prefix).
+  string table = 1;
+  // Path of the hour-file the block was read from. Not provenance for its own
+  // sake: it is what makes crash recovery decidable, since block_info is
+  // written after the events and a complete row for a file is the proof that
+  // the file's events are durable.
+  string source_file = 2;
+  int64 block_number = 3;
+  google.protobuf.Timestamp block_time = 4;
+
+  // Node-side span of this block -> ingestion lag, per block.
+  google.protobuf.Timestamp first_local_time = 5;
+  google.protobuf.Timestamp last_local_time = 6;
+
+  // Events exploded from this block, and their log_index range. A gap between
+  // max and min+1 means events were lost, which makes the block visible as
+  // incomplete rather than silently short.
+  int64 event_count = 7;
+  int64 log_index_min = 8;
+  int64 log_index_max = 9;
+
+  // When the indexer first ingested this block.
+  google.protobuf.Timestamp first_seen_at = 10;
+  bool complete = 11;
+}

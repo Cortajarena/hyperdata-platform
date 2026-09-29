@@ -1,0 +1,70 @@
+// Fills — executed trades, taker and maker sides.
+//
+// Wire:  node_fills_streaming/hourly/<date>/<hour>
+//   {"local_time":…,"block_time":…,"block_number":N,
+//    "events":[["0x7a14…", {"coin":"LIT","px":"1.5047","sz":"7.0", …}]]}
+//
+// Fills are the odd one out: each event is a POSITIONAL TUPLE, [user, payload],
+// not an object — so `user` is element 0 and the payload spreads across the
+// rest. That shape is unrepresentable in draft-07 JSON Schema (no prefixItems)
+// and unreadable by Arrow's JSON reader, which is the concrete reason the
+// normaliser exists rather than a declarative validator.
+//
+// A typical line carries 15 of the 21 possible keys; the sparse ones (cloid,
+// deployer_fee, builder_fee, priority_gas, builder, twap_id) plus liquidation
+// appear on a minority of fills.
+syntax = "proto3";
+
+package hypercore.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// One row per fill -> hypercore.fills.
+// Hidden partitioning: hours(block_time).
+message FillRow {
+  int64 block_number = 1;
+  google.protobuf.Timestamp block_time = 2;
+  google.protobuf.Timestamp local_time = 3;
+  int64 log_index = 4;
+  string source_file = 5;
+  google.protobuf.Timestamp ingest_ts = 6;
+
+  // Lifted out of tuple element 0.
+  string user = 7;
+  // Epoch milliseconds. (Contrast: order_statuses' event `time` is an ISO
+  // string that duplicates block_time, and is dropped.)
+  int64 time = 8;
+  string coin = 9;
+  string px = 10;
+  string sz = 11;
+  string side = 12;
+  // 9 observed values (Open Long, Close Short, …) -> string.
+  string dir = 13;
+  // Decimals, kept as strings; start_position and closed_pnl go negative.
+  string closed_pnl = 14;
+  string start_position = 15;
+  bool crossed = 16;
+  string fee = 17;
+  // NOT always USDC: 10+ aligned-quote tokens observed.
+  string fee_token = 18;
+  // Transaction hash, 66 chars (0x + 64 hex). Never null here, unlike the
+  // order-status hash (66.6% null).
+  string hash = 19;
+  int64 oid = 20;
+  int64 tid = 21;
+  string cloid = 22;
+  string deployer_fee = 23;
+  // A plain address string here, versus the {b, f} object in order statuses.
+  string builder = 24;
+  string builder_fee = 25;
+  string priority_gas = 26;
+  int64 twap_id = 27;
+  Liquidation liquidation = 28;
+}
+
+// Present on ~6 in 100,000 fills.
+message Liquidation {
+  string liquidated_user = 1;
+  string mark_px = 2;
+  string method = 3;
+}

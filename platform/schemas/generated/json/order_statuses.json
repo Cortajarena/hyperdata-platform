@@ -1,0 +1,220 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Cortajarena/hyperdata-platform/blob/main/platform/schemas/generated/json/order_statuses.json",
+  "title": "hypercore.order_statuses",
+  "description": "Storage row contract for hypercore.order_statuses (from hypercore.v1.OrderStatusRow).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "block_number": {
+      "type": "integer"
+    },
+    "block_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "local_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "log_index": {
+      "type": "integer"
+    },
+    "source_file": {
+      "type": "string"
+    },
+    "ingest_ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "user": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "hash": {
+      "type": "string"
+    },
+    "builder": {
+      "type": "object",
+      "properties": {
+        "b": {
+          "type": "string"
+        },
+        "f": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "order": {
+      "type": "object",
+      "properties": {
+        "oid": {
+          "type": "integer"
+        },
+        "coin": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string"
+        },
+        "limit_px": {
+          "type": "string"
+        },
+        "sz": {
+          "type": "string"
+        },
+        "orig_sz": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "integer"
+        },
+        "order_type": {
+          "type": "string"
+        },
+        "tif": {
+          "type": "string"
+        },
+        "cloid": {
+          "type": "string"
+        },
+        "trigger_condition": {
+          "type": "string"
+        },
+        "trigger_px": {
+          "type": "string"
+        },
+        "is_trigger": {
+          "type": "boolean"
+        },
+        "is_position_tpsl": {
+          "type": "boolean"
+        },
+        "reduce_only": {
+          "type": "boolean"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "oid": {
+                "type": "integer"
+              },
+              "coin": {
+                "type": "string"
+              },
+              "side": {
+                "type": "string"
+              },
+              "limit_px": {
+                "type": "string"
+              },
+              "sz": {
+                "type": "string"
+              },
+              "orig_sz": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "integer"
+              },
+              "order_type": {
+                "type": "string"
+              },
+              "tif": {
+                "type": "string"
+              },
+              "cloid": {
+                "type": "string"
+              },
+              "trigger_condition": {
+                "type": "string"
+              },
+              "trigger_px": {
+                "type": "string"
+              },
+              "is_trigger": {
+                "type": "boolean"
+              },
+              "is_position_tpsl": {
+                "type": "boolean"
+              },
+              "reduce_only": {
+                "type": "boolean"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "oid": {
+                      "type": "integer"
+                    },
+                    "coin": {
+                      "type": "string"
+                    },
+                    "side": {
+                      "type": "string"
+                    },
+                    "limit_px": {
+                      "type": "string"
+                    },
+                    "sz": {
+                      "type": "string"
+                    },
+                    "orig_sz": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "integer"
+                    },
+                    "order_type": {
+                      "type": "string"
+                    },
+                    "tif": {
+                      "type": "string"
+                    },
+                    "cloid": {
+                      "type": "string"
+                    },
+                    "trigger_condition": {
+                      "type": "string"
+                    },
+                    "trigger_px": {
+                      "type": "string"
+                    },
+                    "is_trigger": {
+                      "type": "boolean"
+                    },
+                    "is_position_tpsl": {
+                      "type": "boolean"
+                    },
+                    "reduce_only": {
+                      "type": "boolean"
+                    },
+                    "children_overflow_json": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "children_overflow_json": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "children_overflow_json": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

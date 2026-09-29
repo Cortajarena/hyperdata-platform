@@ -1,0 +1,38 @@
+# Schema contract drift gate.
+#
+# The .proto files are the source of truth and generated/ is committed, so the
+# only way that stays true is to prove it on every change. This job
+# regenerates and fails if the committed output differs.
+#
+# `buf lint` and `buf breaking` land next: breaking-change detection is the
+# highest-value CI addition here, since the contract is consumed by two
+# independent repos.
+name: schemas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform/schemas/**"
+      - ".github/workflows/schemas.yml"
+  pull_request:
+    paths:
+      - "platform/schemas/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install protobuf toolchain
+        run: pip install grpcio-tools==1.84.0
+      - name: Regenerate and fail on drift
+        working-directory: platform/schemas
+        run: python tools/generate_schemas.py --check
