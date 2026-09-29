@@ -51,6 +51,13 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".av
 LINK_RE = re.compile(r"(!?\[[^\]]*\]\()([^)\s]+)((?:\s+\"[^\"]*\")?\))")
 H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
+# Subtrees we deliberately do NOT mirror page-by-page. The ethereum-etl fork
+# ships ~14 pages of *upstream* documentation; rendering them would flood the
+# component tree with content we neither wrote nor maintain (and push the nav
+# four levels deep). Its README is rendered as the component index and links out
+# to them. Add vendored trees here as they appear.
+SKIP_SUBTREES = {"services/hyperdata-indexer-evm/docs"}
+
 PLATFORM_REPO = "Cortajarena/hyperdata-platform"
 
 # Populated per build by _scan(); module-level so the nav hook and the file
@@ -144,16 +151,26 @@ class Page:
     children: list = field(default_factory=list)   # list[Page]
 
 
+def _read(path: pathlib.Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _h1_title(path: pathlib.Path, fallback: str) -> str:
+    return _title(_read(path), fallback)
+
+
 def _has_real_files(directory: pathlib.Path) -> bool:
     """A dir counts as real if it holds a non-dot file somewhere below."""
     for path in directory.rglob("*"):
         if path.is_file() and not path.name.startswith("."):
-            if not any(part in SKIP_DIRS for part in path.relative_to(directory).parts[:-1]):
+            parts = path.relative_to(directory).parts[:-1]
+            if not any(part in SKIP_DIRS for part in parts):
                 return True
     return False
 
 
-def _walk(directory: pathlib.Path, root: pathlib.Path, pages_by_src: dict[str, str]) -> Page | None:
+def _walk(directory: pathlib.Path, root: pathlib.Path,
+          pages_by_src: dict[str, str]) -> Page | None:
     """Build the tree for one directory: its README (or a stub) plus child nodes.
 
     A directory is a *component* when it is a COMPONENT_ROOT or sits directly
@@ -171,6 +188,8 @@ def _walk(directory: pathlib.Path, root: pathlib.Path, pages_by_src: dict[str, s
         if child.name.startswith(".") or child.name in SKIP_DIRS:
             continue
         if child.is_dir():
+            if child.relative_to(root).as_posix() in SKIP_SUBTREES:
+                continue
             sub = _walk(child, root, pages_by_src)
             if sub is not None:
                 child_dirs.append(sub)
@@ -179,16 +198,12 @@ def _walk(directory: pathlib.Path, root: pathlib.Path, pages_by_src: dict[str, s
             url = f"components/{rel}"
             pages_by_src[rel] = url
             child_pages.append(
-                Page(
-                    title=_title(child.read_text(encoding="utf-8", errors="replace"), child.stem),
-                    url=url,
-                    src=child,
-                )
+                Page(title=_h1_title(child, child.stem), url=url, src=child)
             )
 
     if readme.is_file():
         node = Page(
-            title=_title(readme.read_text(encoding="utf-8", errors="replace"), directory.name),
+            title=_h1_title(readme, directory.name),
             url=f"components/{rel_dir}/index.md" if rel_dir else "components/index.md",
             src=readme,
         )
@@ -209,7 +224,8 @@ def _walk(directory: pathlib.Path, root: pathlib.Path, pages_by_src: dict[str, s
     return node
 
 
-def _scan(root: pathlib.Path, docs_dir: pathlib.Path) -> tuple[list[Page], dict[str, str]]:
+def _scan(root: pathlib.Path,
+          docs_dir: pathlib.Path) -> tuple[list[Page], dict[str, str]]:
     """Component-root sections + a map of source path -> page url for link rewriting."""
     pages_by_src: dict[str, str] = {}
     sections: list[Page] = []
@@ -237,32 +253,38 @@ def _scan(root: pathlib.Path, docs_dir: pathlib.Path) -> tuple[list[Page], dict[
 # --------------------------------------------------------------------------
 # rendering
 # --------------------------------------------------------------------------
-def _render(page: Page, root: pathlib.Path, mods: dict[str, str], pages_by_src: dict[str, str]) -> str:
+def _render(page: Page, root: pathlib.Path, mods: dict[str, str],
+            pages_by_src: dict[str, str]) -> str:
     assert page.url is not None                      # only page-bearing nodes render
     if page.kind == "intro":
         return _render_intro()
     if page.src is None:
         rel_dir = pathlib.PurePosixPath(page.url).parent.as_posix()
-        rel_dir = rel_dir[len("components/"):] if rel_dir.startswith("components/") else rel_dir
+        prefix = "components/"
+        if rel_dir.startswith(prefix):
+            rel_dir = rel_dir[len(prefix):]
         repo = _owner_repo(rel_dir, mods)
         link = f"https://github.com/{repo}/tree/main/{rel_dir}"
         return (
             f"# {page.title}\n\n"
             '!!! note "README pending"\n'
-            f"    This component has no `README.md` yet — the source of truth for it does not exist.\n"
+            "    This component has no `README.md` yet — the source of truth for"
+            " it does not exist.\n"
             f"    Component path: [`{rel_dir}`]({link})\n"
         )
 
-    text = page.src.read_text(encoding="utf-8", errors="replace")
-    text = _rewrite_links(text, page.src.relative_to(root).parent, page.url, mods, pages_by_src)
+    text = _read(page.src)
+    text = _rewrite_links(text, page.src.relative_to(root).parent, page.url,
+                          mods, pages_by_src)
     return text
 
 
 _INTRO = """# Components
 
-Every page under **Components** is rendered from a `README.md` that sits next to the code it
-documents — usually in that component's own repository, versioned with it. Nothing here is
-hand-copied: add a README (or a whole service) and this tree updates itself on the next build.
+Every page under **Components** is rendered from a `README.md` that sits next
+to the code it documents — usually in that component's own repository,
+versioned with it. Nothing here is hand-copied: add a README (or a whole
+service) and this tree updates itself on the next build.
 
 | Section | What lives there |
 | :--- | :--- |
@@ -271,12 +293,13 @@ hand-copied: add a README (or a whole service) and this tree updates itself on t
 | `platform/` | Cluster systems — Kafka, the Flink cluster, orchestration, serving |
 | `infrastructure/` | Where things run — local KinD, GCP terraform |
 
-A component with no `README.md` yet still appears, marked *README pending* — the tree mirrors
-the repository rather than the documentation.
+A component with no `README.md` yet still appears, marked *README pending* —
+the tree mirrors the repository rather than the documentation.
 
 Design that cuts across components — how they fit together, and why — lives in
-[Ingestion](../ingestion.md) and [Transformation](../transformation.md). The repo-wide
-orientation is the [root README](https://github.com/Cortajarena/hyperdata-platform).
+[Ingestion](../ingestion.md) and [Transformation](../transformation.md). The
+repo-wide orientation is the
+[root README](https://github.com/Cortajarena/hyperdata-platform).
 """
 
 
@@ -368,14 +391,20 @@ def on_nav(nav, config, files, **kwargs):
     (path, title) tuples).
     """
     def to_item(page: Page):
-        children = [item for item in (to_item(c) for c in page.children) if item is not None]
+        kids = [item for item in (to_item(c) for c in page.children)
+                if item is not None]
         if page.url is None:                                  # grouping section, no page
-            return Section(page.title, children) if children else None
+            return Section(page.title, kids) if kids else None
         built = files.get_file_from_path(page.url)
         if not isinstance(built, File):                        # pragma: no cover
             return None
         built.title = page.title
-        return Section(page.title, children) if children else built
+        if not kids:
+            return built
+        # The node's own page becomes the section's *index page* (first child),
+        # which is what `navigation.indexes` needs to make the section title a
+        # link to it — so "services" is clickable, not just a collapsible label.
+        return Section(page.title, [built, *kids])
 
     items = [item for item in (to_item(s) for s in _state["pages"]) if item is not None]
     if items:
