@@ -34,6 +34,42 @@ services:
       - node-outputs:/watch
     profiles: [node]
 
+  hyperdata-indexer-hypercore:
+    # Batch ingestion of the node's hour-files into Iceberg — one table per run.
+    # Profile-gated because it is a one-shot workload, not a daemon: `run --rm`
+    # rather than `up`. Normally driven by the ingest DAG
+    # (platform/airflow/dags/hypercore_ingest.py), which runs this same image.
+    build:
+      context: ./hyperdata-indexer-hypercore
+    command: ["run"]
+    environment:
+      TABLE: ${HYPERCORE_TABLE:-fills}
+      NODE_DIR: /node
+      SCHEMA_DIR: /schemas/generated/arrow
+      STATE_DIR: /state
+      CATALOG_URI: ${HYPERCORE_CATALOG_URI:-http://iceberg-catalog:19120}
+      WAREHOUSE: ${HYPERCORE_WAREHOUSE:-s3://hyperdata-warehouse}
+      S3_ENDPOINT: ${HYPERCORE_S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-hyperdata}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-hyperdata-dev}
+    volumes:
+      # The row contract, generated from platform/schemas and mounted
+      # read-only: the image never carries a second copy that could disagree
+      # with the contract the warehouse was built from.
+      - ../platform/schemas/generated/arrow:/schemas/generated/arrow:ro
+      # The node's output tree. NOTE: the real node bind-mounts
+      # ${DATA_DIR}/hl-node-data -> /home/hluser/hl, not this volume; the two
+      # have to agree before this sees a file. Next branch.
+      - node-outputs:/node:ro
+      # Ledger + dead letters. Must outlive the container, or every re-run
+      # re-ingests.
+      - hypercore-indexer-state:/state
+    # No depends_on: iceberg-catalog is profile-gated (`warehouse`), and Compose
+    # rejects a dependency on a service from another profile. Bringing the
+    # warehouse up is a precondition of running this, documented rather than
+    # enforced — and it is a one-shot workload anyway (`run --rm`, not `up`).
+    profiles: [indexer]
+
   # --- Catalog & dev storage (Parquet/Iceberg layer) ---
   iceberg-catalog:
     # REST catalog (Nessie-class) — one catalog for Flink/Spark/dbt.
@@ -65,5 +101,12 @@ services:
 
 volumes:
   node-outputs:
+  # Name pinned, not project-prefixed: the ingest DAG runs this image with a
+  # plain `docker run -v hypercore-indexer-state:/state`, and a compose-created
+  # volume would be hyperdata-platform_hypercore-indexer-state. Two names would
+  # mean two volumes, so the DAG would get an empty ledger and re-ingest every
+  # file on every run — silent, and exactly what the ledger exists to prevent.
+  hypercore-indexer-state:
+    name: hypercore-indexer-state
   catalog-data:
   warehouse-data:

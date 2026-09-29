@@ -1,0 +1,65 @@
+# Airflow — orchestration platform system, plus the metadata DB it owns.
+# Defined once here; the root stack includes this fragment rather than
+# redeclaring it:
+#   root stack: `- platform/airflow/compose.yaml`
+# Standalone:   cd platform/airflow && docker compose up
+#
+# DAGs live in ./dags (mounted, so a DAG edit needs no rebuild). The docker
+# socket is mounted because DAGs here drive sibling containers: they run the
+# ingest images (`hyperdata-indexer`) with `docker run` rather than importing
+# their code, so the image and the DAG version independently.
+#
+# Credentials come from an optional .env (see .env.example); the values below
+# are dev defaults and inline so the stack boots without one.
+
+name: hyperdata-platform
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+  environment:
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${HYPERDATA_PG_USER:-airflow}:${HYPERDATA_PG_PASSWORD:-airflow}@postgres:5432/airflow
+    # The ingest DAG reads its warehouse settings from the environment so a
+    # task does not have to hard-code them; see dags/hypercore_ingest.py.
+    - HYPERCORE_NODE_DIR=${HYPERCORE_NODE_DIR:-/data/hl-node-data/data}
+    - HYPERCORE_CATALOG_URI=${HYPERCORE_CATALOG_URI:-http://iceberg-catalog:19120}
+    - HYPERCORE_WAREHOUSE=${HYPERCORE_WAREHOUSE:-s3://hyperdata-warehouse}
+    - HYPERCORE_S3_ENDPOINT=${HYPERCORE_S3_ENDPOINT:-http://minio:9000}
+    - HYPERCORE_MINIO_USER=${MINIO_ROOT_USER:-hyperdata}
+    - HYPERCORE_MINIO_PASSWORD=${MINIO_ROOT_PASSWORD:-hyperdata-dev}
+    - HYPERCORE_INDEXER_IMAGE=${HYPERCORE_INDEXER_IMAGE:-hyperdata-indexer:latest}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./plugins:/opt/airflow/plugins
+    - ../../jobs/dbt:/opt/airflow/dbt
+    - /var/run/docker.sock:/var/run/docker.sock
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  # --- Airflow's metadata database (owned here, not a separate system) ---
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${HYPERDATA_PG_USER:-airflow}
+      - POSTGRES_PASSWORD=${HYPERDATA_PG_PASSWORD:-airflow}
+      - POSTGRES_DB=${POSTGRES_DB:-airflow}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HYPERDATA_PG_USER:-airflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
