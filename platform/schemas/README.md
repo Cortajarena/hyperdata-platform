@@ -5,7 +5,7 @@ warehouse, in `proto/hypercore/v1/`. Consumers never hand-write a schema: the
 Python indexer and the Flink job both derive their row types from here.
 
 The full design — row model, field-level contract, identity rules, measured
-throughput — is in [docs/ingestion.md](../../../docs/ingestion.md#ingestion-schemas--the-contract-locked-2026-09-29).
+throughput — is in [docs/ingestion.md](https://github.com/Cortajarena/hyperdata-platform/blob/main/docs/ingestion.md#ingestion-schemas--the-contract-locked-2026-09-29).
 This README is the operational contract: how to regenerate, and what the rules
 are.
 
