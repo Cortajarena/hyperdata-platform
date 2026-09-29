@@ -1,3 +1,5 @@
+![HyperData](assets/logo_green.svg)
+
 # Hyperdata Platform
 
 A unified polyglot data platform monorepo combining orchestration, batch

@@ -25,6 +25,14 @@ docs_dir: docs
 
 theme:
   name: material
+  # Published from assets/img/logo_green.svg at build time by the
+  # build_components hook, so there is one canonical logo rather than a copy
+  # committed under docs/ as well.
+  logo: assets/logo_green.svg
+  # TODO(square): the logo is a 1000x200 wordmark, so it reads as a smear at
+  # 16px. A square mark would be the right favicon; until then this at least
+  # identifies the tab.
+  favicon: assets/logo_green.svg
   palette:
     # Dark only, matching the landing page; green accents come from
     # docs/styles/brand.css (same tokens as site/styles.css).
