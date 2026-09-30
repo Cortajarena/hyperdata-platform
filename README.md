@@ -21,15 +21,40 @@ Well, HyperLiquid's dual chain architecture is the perfect example to build a fu
 
 ## Status [WIP]
 
-This is an initial draft. We are currently working on the ingestion pipelines **[docs/ingestion.md](docs/ingestion.md)**, with ETA 1-2 weeks to support full ingestion of HyperCore into a central Iceberg catalog. Next steps will be adding EVM near real time ingestion, orchestration and backfills both for HyperCore and HyperEVM, and basic **dbt** modeling to start with. Then we will start building IaC and kubernetes deployments.
+The first working slice of the HyperCore ingestion layer is merged: the row
+contract ([`platform/schemas`](platform/schemas) — one `.proto` per table,
+generated artifacts committed, drift-gated in CI) and the first writer built
+from it ([`services/hyperdata-indexer-hypercore`](services/hyperdata-indexer-hypercore),
+sealed hour-files → Iceberg), plus the Airflow slice with a mockup DAG to
+schedule it. Full design: **[docs/ingestion.md](docs/ingestion.md)**.
+
+**Current milestone — the whole pipeline as one local simulation stack:**
+
+1. **Node** — `compose.yml` with two services from the same image: `live`
+   (the real node) and `replay` (an endpoint that appends a corpus `--input`
+   to the shared output volume, mimicking the node's writes at a controlled
+   `--pace` in blocks/s).
+2. **Indexer** — parsing of the replay's output proven against a **local
+   Iceberg catalog** in the same compose stack; repo, README and tests
+   cleanup.
+3. **Airflow** — initial clean version, documented, so `docker compose up`
+   runs the end-to-end simulation.
+
+Then **CI/CD + artifact registry** (real pipelines, images published and
+pulled by digest, `buf lint`/`buf breaking`, the contract pinned and
+versioned), then **IaC** (terraform/helm/k8s — the KinD dev cluster already
+exists). EVM near-real-time ingestion, orchestration/backfills and **dbt**
+modeling follow. Detailed TODOs: [docs/ingestion.md](docs/ingestion.md)
+(buildout runway) and the TODO sections of the [schemas](platform/schemas)
+and [indexer](services/hyperdata-indexer-hypercore) READMEs.
 
 ## Repository layout
 
 | Dir | What lives here |
 |---|---|
-| [`services/`](services/) | Long-running deployables: `hyperdata-node`, `hyperdata-node-sidecar` (planned), `hyperdata-indexer-hyperevm` |
+| [`services/`](services/) | Long-running deployables: `hyperdata-node`, `hyperdata-indexer-hypercore`, `hyperdata-node-sidecar` (planned), `hyperdata-indexer-hyperevm` |
 | [`jobs/`](jobs/) | Compute code by engine: `jobs/flink` (HyperCore parse → Iceberg), `jobs/dbt`, `jobs/spark` |
-| [`platform/`](platform/) | Cluster systems: Kafka, ClickHouse (serving store), Flink cluster, Airflow, Prefect |
+| [`platform/`](platform/) | Cluster systems: Kafka, ClickHouse (serving store), Flink cluster, Airflow, Prefect; `platform/schemas` — the shared `.proto` row contract |
 | [`infrastructure/`](infrastructure/) | Where things run: kind dev cluster, terraform/pending |
 | [`docs/`](docs/) | Execution plans and architecture notes ([ingestion](docs/ingestion.md), [transformation](docs/transformation.md)) |
 
@@ -37,7 +62,7 @@ Local stack conventions:
 
 - **Per-slice compose files** (`platform/kafka/compose.yaml`, `services/compose.yaml`), aggregated by the root `docker-compose.yml` via `include:`; slices are standalone-runnable.
 - **No `version:` key** in compose files (Compose ≥ 2.20) and a fixed `name: hyperdata-platform` across compose files so included/standalone runs share identity.
-- **Profiles gate workloads** needing external inputs (`--profile node` for the node + sidecar, `--profile warehouse` for catalog + storage); cluster systems (Kafka) are always-on.
+- **Profiles gate workloads** needing external inputs (`--profile node` for the node + sidecar, `--profile indexer` for the HyperCore batch indexer, `--profile warehouse` for catalog + storage); cluster systems (Kafka) are always-on.
 
 Usage (from repo root):
 
@@ -45,15 +70,18 @@ Usage (from repo root):
 docker compose up                                          # platform + shared systems (Kafka included)
 docker compose --profile node up                           # + hyperdata-node & sidecar
 docker compose --profile node --profile warehouse up       # + Iceberg catalog & MinIO
+docker compose --profile indexer --profile warehouse up    # + HyperCore batch indexer (hour-files → Iceberg)
 cd services && docker compose up                           # standalone: just the services slice
 make kind-up                                               # minimal local Kubernetes (KinD) dev cluster
 ```
+
+> **Note:** the `indexer` profile starts the batch indexer against the `node-outputs` volume, but it finds no files there yet — the node bind-mounts `${DATA_DIR}/hl-node-data` → `/home/hluser/hl`, so the two do not share an output volume. The node's `compose.yml` (`live` + `replay`, the current milestone) reconciles this; see [Status](#status-wip).
 
 ## Ingestion layer: distributed (batch) ingestion & stateful streaming
 
 The full ingestion design — live node, replay-as-tap (progressive append), sidecar line-tailing to per-table Kafka topics, unified Flink bounded/unbounded parsing, snapshot-aligned backfill, Parquet/Iceberg layout — lives in **[docs/ingestion.md](docs/ingestion.md)**. Milestones for v0.1.0 are tracked there.
 
-Near-term milestones: ingestion of **HyperCore** node outputs (order diffs, trades, etc.), plus the HyperCore node sidecar issuing Kafka messages for all tables (topics) — tailing/polling approach, near real time is good enough.
+**Where we are:** the file path is built and merged — the [schema contract](platform/schemas) plus [`hyperdata-indexer-hypercore`](services/hyperdata-indexer-hypercore) batch-polling sealed hour-files into Iceberg. **Next:** the local simulation stack (see [Status](#status-wip)) — node `compose.yml` with `live` + `replay` services, the indexer proven against the local catalog, Airflow running it end to end. After that, the line-streaming path: the HyperCore node sidecar issuing Kafka messages for all tables (topics) — tailing/polling, near real time is good enough — as [Phase 4](docs/ingestion.md).
 
 ### HyperEVM ingestion (or any other EVM blockchain)
 
@@ -65,8 +93,9 @@ Summary of the layer:
 
 | Subsystem | Role |
 | :--- | :--- |
-| [`services/hyperdata-node`](services/hyperdata-node) | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; snapshot bootstrap tooling. |
+| [`services/hyperdata-node`](services/hyperdata-node) | HyperLiquid node (hl-visor) emitting raw output files + full-state snapshots; `compose.yml` with `live` + `replay` (same image, paced corpus appends) planned. |
 | [`services/hyperdata-node-sidecar`](services/hyperdata-node-sidecar) (planned) | Line tailer: streams appended output lines to per-table Kafka topics + hour-file seals; backup sink. |
+| [`services/hyperdata-indexer-hypercore`](services/hyperdata-indexer-hypercore) | Batch writer: sealed hour-files → Iceberg via `pyiceberg` (REST catalog), file-level `(path, sha256)` ledger for idempotency; rows shaped by [`platform/schemas`](platform/schemas). |
 | [`jobs/flink`](jobs/flink) | `parse-node-outputs`: one Flink job for live, replay and backfill (JSONL → Parquet → Iceberg); cluster in `platform/flink-cluster`. |
 | [`services/hyperdata-indexer-hyperevm`](services/hyperdata-indexer-hyperevm) | HyperEVM event firehose (Envio → Postgres). |
 | `services/socket-listeners` (future) | WebSocket feeds for other CEX/DEX venues. |
@@ -85,5 +114,9 @@ directory's README.
 ## IaC (Infrastructure) & CI/CD [planned]
 
 The tooling home is [`infrastructure/`](infrastructure/) — the kind dev
-cluster is live; terraform + real Kubernetes manifests come next (see the
-[K8s roadmap](infrastructure/kind/README.md#roadmap-in-expected-order)).
+cluster is live; terraform + helm + real Kubernetes manifests come next
+(see the [K8s roadmap](infrastructure/kind/README.md#roadmap-in-expected-order)).
+Order of attack matches [Status](#status-wip): the local simulation stack
+first, then **CI/CD + artifact registry** — real pipelines, `buf lint`/`buf
+breaking` for the contract, the indexer image published and pulled by
+digest — and only then IaC.

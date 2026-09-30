@@ -515,28 +515,30 @@ The sidecar **tails appended lines** — Kafka is a **data plane** for the three
 
 ---
 
-## Phase 3.5 — Schema contract + HyperCore indexer (file path, no Kafka)
+## Phase 3.5 — Schema contract + HyperCore indexer (file path, no Kafka) [built 2026-09-29, merged in PR #1; acceptance pending the simulation stack]
 
 **Goal:** the contract that both writers share, and the first writer built from it — the Python indexer that batch-polls the node's output files straight into Iceberg. Deliberately parallel to Phases 2/3: it needs the corpus and the warehouse, not the sidecar or Kafka. Design: [Ingestion schemas](#ingestion-schemas-the-contract-locked-2026-09-29).
 
 **Contract (`platform/schemas/`)** — one `.proto` per table (`envelope`, `book_diffs`, `order_statuses`, `fills`, `block_info`), fields verified against the corpus:
 
-- [ ] `buf` workspace + `make schemas` target: `.proto` → `generated/arrow/*.json` + `generated/json/*.json`, both **committed**.
-- [ ] CI job: regenerate and **fail on drift**; then add `buf lint` + `buf breaking` against the previous commit.
-- [ ] A `platform/schemas/README.md` stating the rule: edit the `.proto`, never the generated files.
-- [ ] Unit tests pinning the closed sets the corpus proved: diff variants `{new, update, remove}`, `side ∈ {A,B}`, the fills tuple shape, `order.children` depth ≤ 3, unknown variant ⇒ DLQ (not a silent drop).
+- [x] `make generate | check | conformance` targets, all containerised (no host protoc): `.proto` → `generated/arrow/*.py` (importable `pa.schema` modules) + `generated/json/*.json` (draft-07), both **committed**.
+- [x] CI drift job (`.github/workflows/schemas.yml`): regenerate into a tempdir, **fail on drift** — green on the PR and on `main`.
+- [x] A `platform/schemas/README.md` stating the rule: edit the `.proto`, never the generated files.
+- [x] Unit tests pinning the closed sets the corpus proved — diff variants `{new, update, remove}`, the fills tuple shape, `order.children` depth ≤ 3 + overflow, unknown variant/shape ⇒ DLQ (not a silent drop). They live in the indexer's suite, next to the normaliser that enforces them.
+- [ ] `buf lint` + `buf breaking` against the previous commit — no `buf` workspace yet (top TODO in `platform/schemas/README.md`).
 
 **Indexer (`services/hyperdata-indexer-hypercore`, Python)**:
 
-- [ ] Load the generated Arrow schema once at startup; stream hour-files line by line — `orjson.loads` → normalise → column-wise `pa.array` (no dict-per-row).
-- [ ] Enforce the contract at runtime: unknown diff variant / unexpected type ⇒ dead-letter + alert, with a DLQ directory and a rejected-line counter in metrics.
-- [ ] Buffer to 100–500 MB, then `pyiceberg` append against the REST catalog (MinIO in dev) — events **and** the matching `block_info` rows in one transaction.
-- [ ] **File ledger** keyed `(path, sha256)`: skip already-ingested files, so a re-run is a no-op and an interrupted run resumes per file.
-- [ ] Watch mode for live use (poll for the current hour file, ingest incrementally) — same code path as the backfill mode, mirroring "replay = live".
-- [ ] Metrics: lines in/out, rejects, bytes/s, lag vs `block_time`, files ingested, DLQ depth.
-- [ ] Tests: normalise against real corpus lines (the three variants + the fills tuple + a nested `children` case), Arrow schema conformance, ledger idempotency, end-to-end into MinIO.
+- [x] Load the generated Arrow schema once at startup; stream hour-files line by line — `orjson.loads` → normalise → column-wise `pa.array` (no dict-per-row).
+- [x] Enforce the contract at runtime: unknown diff variant / unexpected type ⇒ dead-letter — a DLQ directory of JSONL files, one object per rejected line carrying enough to find it again in the source — plus a rejected counter in the per-file and run summaries.
+- [x] Buffer to a byte-estimate threshold (`BUFFER_BYTES`, default 256 MB — inside the 100–500 MB window), then `pyiceberg` append against the REST catalog (MinIO in dev). Events first, `block_info` last, `complete: true` as the commit marker — **not** one transaction (pyiceberg 0.12 has no cross-table one; the guarantee is ordering + recovery, see [`block_info`](#block_info--the-block-boundary-table)).
+- [x] **File ledger** keyed `(path, sha256)`: skip already-ingested files, so a re-run is a no-op and an interrupted run resumes per file.
+- [x] Tests: normalise against real corpus lines (the three variants + the fills tuple + a nested `children` case), Arrow schema conformance, ledger idempotency — the container suite.
+- [ ] Live use: one-shot `run` over discovered sealed files, scheduled externally (Airflow DAG / compose). No in-process watch loop — the ledger makes every re-run a no-op, so the scheduled batch path is the live path. The simulation stack exercises it.
+- [ ] Metrics beyond the log counters (lines in/out, rejects, bytes/s, lag vs `block_time`, DLQ depth) — none yet.
+- [ ] End-to-end into MinIO — the acceptance below.
 
-**Acceptance:** point the indexer at the Jun-10 hour → `hypercore.*` row counts match the corpus record counts; `block_info` reconciles (`event_count` per block = rows written, `log_index_min/max` contiguous); re-run → zero new rows; a deliberately corrupted line lands in the DLQ and the run continues.
+**Acceptance (open — this is the simulation-stack milestone):** point the indexer at the replayed Jun-10 hour → `hypercore.*` row counts match the corpus record counts; `block_info` reconciles (`event_count` per block = rows written, `log_index_min/max` contiguous); re-run → zero new rows; a deliberately corrupted line lands in the DLQ and the run continues. Blocked on the node's `compose.yml` (`live` + `replay`): the node bind-mounts `${DATA_DIR}/hl-node-data` → `/home/hluser/hl` while the indexer mounts the `node-outputs` volume, so `--profile indexer` starts and finds no files.
 
 ---
 
